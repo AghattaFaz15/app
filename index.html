@@ -1,296 +1,162 @@
-<!doctype html>
-
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Booth 360 — Gravador + SlowMo + Zoom + Upload + QR</title>
-  <style>
-    :root{--bg:#04132b;--card:#07203a;--gold:#d4a12a;--muted:#9fb0c8}
-    body{font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,var(--bg),#05223b);color:#eaf6ff;margin:0;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px}
-    .wrap{width:1100px;max-width:98%;padding:18px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));box-shadow:0 8px 30px rgba(2,6,23,0.6)}
-    header{display:flex;align-items:center;gap:12px}
-    h1{margin:0;font-size:20px;color:var(--gold)}
-    .grid{display:grid;grid-template-columns:1fr 360px;gap:16px;margin-top:12px}
-    .card{background:rgba(255,255,255,0.02);padding:12px;border-radius:10px}
-    video,canvas{width:100%;height:320px;background:#000;border-radius:8px;object-fit:cover}
-    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-    button{background:var(--gold);border:0;padding:10px 12px;border-radius:8px;cursor:pointer}
-    .muted{color:var(--muted);font-size:13px}
-    input[type="text"],select,input[type="number"]{width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
-    label{display:block;margin-top:8px;font-size:13px}
-    pre{font-size:12px;color:var(--muted);overflow:auto}
-    footer{margin-top:12px;color:var(--muted);font-size:13px}
-    .small{font-size:12px}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gravar Vídeo com Slow Motion e Zoom</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #0b0f3a;
+    color: white;
+    text-align: center;
+    padding: 20px;
+  }
+  video {
+    border: 3px solid gold;
+    width: 90%;
+    max-width: 400px;
+    margin: 10px 0;
+    border-radius: 10px;
+  }
+  button {
+    padding: 10px 15px;
+    margin: 5px;
+    border: none;
+    background: gold;
+    color: black;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  canvas {
+    display: none;
+  }
+  #qrcode {
+    margin-top: 20px;
+  }
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="color:var(--gold)"><path d="M12 2v4M4.93 4.93l2.83 2.83M2 12h4M4.93 19.07l2.83-2.83M12 18v4M19.07 19.07l-2.83-2.83M20 12h-4M19.07 4.93l-2.83 2.83"/></svg>
-      <div>
-        <h1>Booth 360 — Gravador & Auto-edit</h1>
-        <div class="muted">Grave com o celular, aplique slowmotion e zoom automaticamente, faça upload no Firebase (ou faça download local) e gere QR code.</div>
-      </div>
-    </header><div class="grid">
-  <div>
-    <div class="card">
-      <label class="muted">Pré-visualização / Captura</label>
-      <video id="preview" autoplay playsinline muted></video>
 
-      <div class="controls">
-        <button id="btnStart">Gravar</button>
-        <button id="btnStop" disabled>Parar</button>
-        <button id="btnProcess" disabled>Processar (SlowMo + Zoom)</button>
-        <button id="btnDownload" disabled>Baixar vídeo final</button>
-      </div>
+<h1>🎥 Gravar Vídeo com Efeito</h1>
 
-      <label class="muted">Configurações de edição</label>
-      <div style="display:flex;gap:8px;margin-top:6px;">
-        <div style="flex:1"><label>Fator SlowMotion (ex: 0.5 = metade da velocidade)</label><input id="slowFactor" type="number" step="0.1" min="0.25" max="1" value="0.5"/></div>
-        <div style="width:120px"><label>Zoom (%)</label><input id="zoom" type="number" min="100" max="300" value="130"/></div>
-      </div>
+<video id="preview" autoplay muted playsinline></video>
+<br>
+<button id="startBtn">▶ Começar Gravação</button>
+<button id="stopBtn" disabled>⏹ Parar Gravação</button>
+<video id="result" controls></video>
+<canvas id="canvas"></canvas>
+<div id="qrcode"></div>
 
-      <label class="muted">Nome/Tag do convidado</label>
-      <input id="guestName" type="text" placeholder="Ex: Maria_001" />
+<script>
+  // Configuração do Firebase
+  const firebaseConfig = {
+    apiKey: "SUA_API_KEY",
+    authDomain: "livro-aghatta.firebaseapp.com",
+    projectId: "livro-aghatta",
+    storageBucket: "livro-aghatta.appspot.com",
+    messagingSenderId: "SEU_ID",
+    appId: "SEU_APP_ID"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const storage = firebase.storage();
 
-      <label class="muted">Status: <span id="status">Aguardando câmera</span></label>
-    </div>
-
-    <div class="card" style="margin-top:12px">
-      <label class="muted">Vídeo processado (resultado)</label>
-      <video id="finalVideo" controls></video>
-      <div class="muted small">Link final (se enviado a um servidor): <a id="finalLink" href="#" target="_blank">nenhum</a></div>
-    </div>
-  </div>
-
-  <aside>
-    <div class="card">
-      <label class="muted">Salvar / Upload</label>
-      <label class="muted">Firebase config (opcional): cole seu objeto <code>firebaseConfig</code> aqui para permitir upload automático.</label>
-      <textarea id="firebaseConfig" style="width:100%;height:140px;padding:8px;border-radius:6px;resize:vertical" placeholder='Ex: {"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
-      <div style="display:flex;gap:8px;margin-top:8px"><button id="btnInitFirebase">Conectar Firebase</button><button id="btnClearConfig">Limpar</button></div>
-      <hr/>
-      <label class="muted">QR Code</label>
-      <div id="qr" style="text-align:center;padding:8px"></div>
-      <div style="text-align:center;margin-top:8px"><button id="btnGenQR" disabled>Gerar QR do link</button></div>
-      <hr/>
-      <label class="muted">Observações</label>
-      <pre class="muted">- O processamento "slow motion + zoom" é feito no navegador: reproduzimos o clipe original em um <canvas> em velocidade reduzida e capturamos a saída com MediaRecorder.
-
-Se você usar Firebase, cole firebaseConfig e permita Storage.
-
-Para que outros baixem diretamente via QR, é necessário upload (objetos locais não são acessíveis por outros dispositivos).</pre> </div> </aside>
-
-  </div>  <footer>
-    Profetocha — Use com fé, mas respeite limites do navegador: vídeo muito grande pode travar em dispositivos fracos. Se quiser, eu adapto pra MP4 server-side (usando FFmpeg) e url curta automática.
-  </footer>
-</div><!-- Dependências --><script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script><script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script><script>
-  // Elementos
+  let mediaRecorder;
+  let recordedChunks = [];
   const preview = document.getElementById('preview');
-  const btnStart = document.getElementById('btnStart');
-  const btnStop = document.getElementById('btnStop');
-  const btnProcess = document.getElementById('btnProcess');
-  const btnDownload = document.getElementById('btnDownload');
-  const statusEl = document.getElementById('status');
-  const finalVideo = document.getElementById('finalVideo');
-  const finalLink = document.getElementById('finalLink');
-  const qrContainer = document.getElementById('qr');
-  const btnGenQR = document.getElementById('btnGenQR');
+  const result = document.getElementById('result');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
 
-  const slowFactorInput = document.getElementById('slowFactor');
-  const zoomInput = document.getElementById('zoom');
-  const guestNameInput = document.getElementById('guestName');
+  async function startCamera() {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    preview.srcObject = stream;
+    mediaRecorder = new MediaRecorder(stream);
 
-  const firebaseConfigInput = document.getElementById('firebaseConfig');
-  const btnInitFirebase = document.getElementById('btnInitFirebase');
-  const btnClearConfig = document.getElementById('btnClearConfig');
-
-  let mediaStream = null;
-  let recorder = null;
-  let recordedBlobs = [];
-
-  let processedBlob = null;
-  let firebaseApp = null, storage = null, database = null;
-
-  async function startCamera(){
-    try{
-      mediaStream = await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720}, audio:true});
-      preview.srcObject = mediaStream;
-      statusEl.textContent = 'Câmera pronta';
-    }catch(e){
-      statusEl.textContent = 'Erro câmera: '+e.message;
-    }
-  }
-  startCamera();
-
-  function startRecording(){
-    recordedBlobs = [];
-    const options = {mimeType:'video/webm;codecs=vp9'};
-    try{ recorder = new MediaRecorder(mediaStream, options); } catch(e){
-      try{ recorder = new MediaRecorder(mediaStream); }catch(err){ alert('Não há suporte a MediaRecorder'); return; }
-    }
-    recorder.ondataavailable = e => { if (e.data && e.data.size) recordedBlobs.push(e.data); };
-    recorder.onstop = ()=>{
-      statusEl.textContent = 'Gravação finalizada. Clique em PROCESSAR.';
-      btnProcess.disabled = false;
-    };
-    recorder.start();
-    statusEl.textContent = 'Gravando...';
-    btnStart.disabled = true; btnStop.disabled = false; btnProcess.disabled = true;
-  }
-  function stopRecording(){ if (recorder && recorder.state!=='inactive') recorder.stop(); btnStop.disabled=true; btnStart.disabled=false; }
-
-  btnStart.addEventListener('click', startRecording);
-  btnStop.addEventListener('click', stopRecording);
-
-  // Processing: play recorded blob into hidden video, draw to canvas at reduced rate and with zoom, capture canvas to new blob
-  async function processRecording(){
-    if (recordedBlobs.length===0) return alert('Nada gravado');
-    statusEl.textContent = 'Processando... isso pode demorar conforme o vídeo';
-    btnProcess.disabled = true;
-
-    const rawBlob = new Blob(recordedBlobs, {type:'video/webm'});
-    const rawUrl = URL.createObjectURL(rawBlob);
-
-    // Cria elementos temporários
-    const tempVideo = document.createElement('video');
-    tempVideo.src = rawUrl; tempVideo.muted = true; tempVideo.playsInline = true;
-
-    await tempVideo.play().catch(()=>{}); // prepara metadados
-    // Determine playback rate (slow factor)
-    const slowFactor = parseFloat(slowFactorInput.value) || 0.5;
-    const targetPlaybackRate = slowFactor; // ex: 0.5
-    tempVideo.pause();
-
-    // Canvas para desenhar
-    const cvs = document.createElement('canvas');
-    const vidW = tempVideo.videoWidth || 1280; const vidH = tempVideo.videoHeight || 720;
-    cvs.width = vidW; cvs.height = vidH;
-    const ctx = cvs.getContext('2d');
-
-    // Aplicar zoom
-    const zoomPercent = Math.max(100, parseInt(zoomInput.value || '130'));
-    const zoom = zoomPercent / 100;
-
-    // Prepare captura do canvas
-    const fps = 30; // taxa de captura do canvas
-    const canvasStream = cvs.captureStream(fps);
-    const processedChunks = [];
-    let procRecorder;
-    try{ procRecorder = new MediaRecorder(canvasStream, {mimeType:'video/webm;codecs=vp9'});}catch(e){ procRecorder = new MediaRecorder(canvasStream); }
-    procRecorder.ondataavailable = e=>{ if (e.data && e.data.size) processedChunks.push(e.data); };
-
-    // Função que avança frame-by-frame considerando slowFactor
-    const frameInterval = 1000 / fps; // ms
-    const playStep = frameInterval * targetPlaybackRate; // how much real video time to advance per canvas frame
-
-    await tempVideo.play().catch(()=>{});
-    procRecorder.start();
-
-    // Start drawing loop
-    let currentTime = 0;
-    tempVideo.currentTime = 0;
-    const totalDuration = tempVideo.duration || 0;
-
-    function drawFrame(){
-      // Set video currentTime to desired
-      tempVideo.currentTime = currentTime;
-      // Draw when ready
-      ctx.save();
-      // clear
-      ctx.clearRect(0,0,cvs.width,cvs.height);
-      // calculate cropping for zoom center
-      const sw = cvs.width / zoom; const sh = cvs.height / zoom;
-      const sx = Math.max(0, (tempVideo.videoWidth - sw)/2);
-      const sy = Math.max(0, (tempVideo.videoHeight - sh)/2);
-      try{
-        ctx.drawImage(tempVideo, sx, sy, sw, sh, 0, 0, cvs.width, cvs.height);
-      }catch(e){ /*draw error*/ }
-      ctx.restore();
-
-      currentTime += playStep/1000; // in seconds
-      if (currentTime < totalDuration){
-        setTimeout(drawFrame, frameInterval);
-      } else {
-        // finish
-        setTimeout(()=>{
-          procRecorder.stop();
-          tempVideo.pause();
-          URL.revokeObjectURL(rawUrl);
-        }, frameInterval);
-      }
-    }
-
-    // When recorder stops, create processed blob
-    procRecorder.onstop = ()=>{
-      processedBlob = new Blob(processedChunks, {type:'video/webm'});
-      const processedUrl = URL.createObjectURL(processedBlob);
-      finalVideo.src = processedUrl;
-      finalLink.href = processedUrl; finalLink.textContent = 'Link local do vídeo (use upload para tornar acessível)';
-      btnDownload.disabled = false; btnGenQR.disabled = true; // QR only if upload
-      statusEl.textContent = 'Processamento concluído (local). Você pode baixar ou enviar ao Firebase.';
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunks.push(e.data);
     };
 
-    // Kickoff
-    drawFrame();
+    mediaRecorder.onstop = async () => {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      recordedChunks = [];
+      applyEffects(blob);
+    };
   }
 
-  btnProcess.addEventListener('click', processRecording);
+  function applyEffects(blob) {
+    const video = document.createElement('video');
+    video.src = URL.createObjectURL(blob);
+    video.playbackRate = 0.5; // slow motion
+    video.onloadedmetadata = () => {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
 
-  // Download local
-  btnDownload.addEventListener('click', ()=>{
-    if (!processedBlob) return alert('Não há vídeo processado');
-    const a = document.createElement('a');
-    const name = (guestNameInput.value || 'video') + '_' + Date.now() + '.webm';
-    a.href = URL.createObjectURL(processedBlob);
-    a.download = name; a.click();
-  });
+      const newChunks = [];
+      const stream = canvas.captureStream();
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
 
-  // Firebase
-  btnInitFirebase.addEventListener('click', ()=>{
-    if (!firebaseConfigInput.value) return alert('Cole o objeto firebaseConfig');
-    try{
-      const conf = JSON.parse(firebaseConfigInput.value);
-      firebaseApp = firebase.initializeApp(conf);
-      storage = firebase.storage();
-      database = firebase.database();
-      alert('Firebase inicializado');
-      btnGenQR.disabled = false;
-    }catch(e){ alert('Erro firebase: '+e.message); }
-  });
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) newChunks.push(e.data);
+      };
 
-  btnClearConfig.addEventListener('click', ()=>{ firebaseConfigInput.value=''; });
+      recorder.onstop = async () => {
+        const newBlob = new Blob(newChunks, { type: 'video/webm' });
+        result.src = URL.createObjectURL(newBlob);
+        uploadToFirebase(newBlob);
+      };
 
-  async function uploadProcessed(){
-    if (!processedBlob) return alert('Processado primeiro');
-    if (!storage) return alert('Conecte o Firebase');
-    statusEl.textContent = 'Enviando para Firebase...';
-    const name = `videos/${(guestNameInput.value||'convidado')}_${Date.now()}.webm`;
-    const ref = storage.ref().child(name);
-    const uploadTask = ref.put(processedBlob, {contentType:'video/webm'});
-    uploadTask.on('state_changed', snap=>{
-      const pct = Math.round((snap.bytesTransferred/snap.totalBytes)*100);
-      statusEl.textContent = 'Upload: '+pct+'%';
-    }, err=>{ statusEl.textContent = 'Erro upload: '+err.message; }, async ()=>{
-      const url = await uploadTask.snapshot.ref.getDownloadURL();
-      finalLink.href = url; finalLink.textContent = url;
-      statusEl.textContent = 'Upload concluído';
-      generateQRCode(url);
+      recorder.start();
+
+      video.play();
+      const drawFrame = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(1.2, 1.2); // zoom
+        ctx.drawImage(video, -canvas.width / 2, -canvas.height / 2);
+        ctx.restore();
+        if (!video.paused && !video.ended) {
+          requestAnimationFrame(drawFrame);
+        } else {
+          recorder.stop();
+        }
+      };
+      drawFrame();
+    };
+  }
+
+  async function uploadToFirebase(blob) {
+    const fileName = `video_${Date.now()}.webm`;
+    const ref = storage.ref().child(fileName);
+    await ref.put(blob);
+    const url = await ref.getDownloadURL();
+
+    // Gera QR Code
+    document.getElementById('qrcode').innerHTML = "";
+    QRCode.toCanvas(document.createElement('canvas'), url, { width: 200 }, (err, canvas) => {
+      if (!err) document.getElementById('qrcode').appendChild(canvas);
     });
   }
 
-  // QR
-  function generateQRCode(text){ qrContainer.innerHTML=''; new QRCode(qrContainer, {text, width:220, height:220}); }
-  btnGenQR.addEventListener('click', async ()=>{
-    if (!processedBlob) return alert('Processar vídeo antes');
-    if (storage) {
-      if (confirm('Enviar o vídeo pro Firebase e gerar QR público?')) await uploadProcessed();
-    } else {
-      alert('Sem Firebase: você pode baixar o arquivo localmente e hospedar em algum serviço para gerar QR.');
-    }
+  document.getElementById('startBtn').addEventListener('click', () => {
+    mediaRecorder.start();
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('stopBtn').disabled = false;
   });
 
+  document.getElementById('stopBtn').addEventListener('click', () => {
+    mediaRecorder.stop();
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
+  });
+
+  startCamera();
 </script>
+
 </body>
 </html>
