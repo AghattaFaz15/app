@@ -1,133 +1,136 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gravar, Editar e Salvar Vídeo</title>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<style>
+  <meta charset="UTF-8">
+  <title>Gravação 360°</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qr-code-styling/1.6.0/qr-code-styling.min.js"></script>
+  <style>
     body {
-        font-family: Arial, sans-serif;
-        text-align: center;
-        background: #0b2545;
-        color: white;
-        padding: 20px;
+      font-family: sans-serif;
+      text-align: center;
+      background: #0b132b;
+      color: white;
+      margin: 0;
+      padding: 0;
     }
     video {
-        width: 100%;
-        max-width: 400px;
-        border: 3px solid gold;
-        border-radius: 10px;
-        margin-bottom: 15px;
+      width: 100%;
+      border-bottom: 3px solid gold;
     }
     button {
-        padding: 10px 20px;
-        margin: 5px;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 16px;
+      padding: 10px 20px;
+      font-size: 18px;
+      margin: 10px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
     }
-    #qrcode {
-        margin-top: 20px;
+    #startBtn {
+      background: #1abc9c;
+      color: white;
     }
-</style>
+    #stopBtn {
+      background: #e74c3c;
+      color: white;
+    }
+    #qrCode {
+      margin-top: 20px;
+    }
+  </style>
 </head>
 <body>
 
-<h1>🎥 Gravação e Edição</h1>
+  <h2>🎥 Gravação 360°</h2>
+  <video id="preview" autoplay playsinline></video>
 
-<video id="preview" autoplay playsinline></video>
-<video id="editPreview" controls style="display:none;"></video>
+  <div>
+    <button id="startBtn">▶️ Gravar</button>
+    <button id="stopBtn" disabled>⏹ Parar</button>
+  </div>
 
-<br>
-<button id="startBtn" style="background:green; color:white;">Iniciar Gravação</button>
-<button id="stopBtn" style="background:red; color:white;" disabled>Parar</button>
-<button id="processBtn" style="background:gold; color:black;" disabled>Processar Edição</button>
-<button id="uploadBtn" style="background:blue; color:white;" disabled>Enviar p/ Firebase</button>
+  <div id="status"></div>
+  <div id="qrCode"></div>
 
-<div id="qrcode"></div>
+  <script>
+    const video = document.getElementById('preview');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const statusDiv = document.getElementById('status');
+    let mediaRecorder;
+    let chunks = [];
 
-<script>
-// --- CONFIG DO FIREBASE ---
-const firebaseConfig = {
-    apiKey: "SUA_API_KEY",
-    authDomain: "SEU_AUTH_DOMAIN",
-    projectId: "SEU_PROJECT_ID",
-    storageBucket: "SEU_STORAGE_BUCKET",
-    messagingSenderId: "SEU_SENDER_ID",
-    appId: "SUA_APP_ID"
-};
-firebase.initializeApp(firebaseConfig);
-const storage = firebase.storage();
+    // Config Cloudinary
+    const cloudName = "dxobnhynf"; 
+    const uploadPreset = "plataforma_360"; // ⚠️ Troque se usar outro nome
 
-// --- VARIÁVEIS ---
-let mediaRecorder;
-let recordedChunks = [];
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+          audio: false
+        });
+        video.srcObject = stream;
+        mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp8" });
 
-// --- ACESSAR CÂMERA ---
-const preview = document.getElementById('preview');
-navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-.then(stream => {
-    preview.srcObject = stream;
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.ondataavailable = e => {
-        if (e.data.size > 0) recordedChunks.push(e.data);
-    };
-})
-.catch(err => alert("Erro ao acessar câmera: " + err));
+        mediaRecorder.ondataavailable = e => chunks.push(e.data);
+        mediaRecorder.onstop = uploadVideo;
+      } catch (err) {
+        alert("Erro ao acessar a câmera: " + err.message);
+      }
+    }
 
-// --- GRAVAR ---
-document.getElementById('startBtn').onclick = () => {
-    recordedChunks = [];
-    mediaRecorder.start();
-    document.getElementById('startBtn').disabled = true;
-    document.getElementById('stopBtn').disabled = false;
-};
+    function startRecording() {
+      chunks = [];
+      mediaRecorder.start();
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      statusDiv.textContent = "🔴 Gravando...";
+    }
 
-document.getElementById('stopBtn').onclick = () => {
-    mediaRecorder.stop();
-    document.getElementById('stopBtn').disabled = true;
-    document.getElementById('processBtn').disabled = false;
-};
+    function stopRecording() {
+      mediaRecorder.stop();
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      statusDiv.textContent = "⏳ Enviando vídeo...";
+    }
 
-// --- PROCESSAR EDIÇÃO ---
-document.getElementById('processBtn').onclick = async () => {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    const arrayBuffer = await blob.arrayBuffer();
+    async function uploadVideo() {
+      const blob = new Blob(chunks, { type: "video/webm" });
+      const formData = new FormData();
+      formData.append("file", blob);
+      formData.append("upload_preset", uploadPreset);
 
-    // Simples efeito de slow motion e zoom (simulação)
-    const videoURL = URL.createObjectURL(blob);
-    const editPreview = document.getElementById('editPreview');
-    editPreview.src = videoURL;
-    editPreview.style.display = 'block';
-    editPreview.playbackRate = 0.5; // Slow motion
-    editPreview.style.transform = "scale(1.2)"; // Zoom simples
+      try {
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, {
+          method: "POST",
+          body: formData
+        });
 
-    document.getElementById('uploadBtn').disabled = false;
-};
+        const data = await res.json();
+        console.log("URL do vídeo:", data.secure_url);
 
-// --- UPLOAD PARA FIREBASE ---
-document.getElementById('uploadBtn').onclick = async () => {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    const fileName = `videos/${Date.now()}.webm`;
-    const ref = storage.ref().child(fileName);
-    await ref.put(blob);
-    const url = await ref.getDownloadURL();
+        statusDiv.innerHTML = `✅ Vídeo enviado!<br><a href="${data.secure_url}" target="_blank" style="color: gold;">Abrir Vídeo</a>`;
 
-    // --- GERAR QR CODE ---
-    document.getElementById('qrcode').innerHTML = "";
-    new QRCode(document.getElementById("qrcode"), {
-        text: url,
-        width: 200,
-        height: 200
-    });
+        // Gera QR Code
+        document.getElementById("qrCode").innerHTML = "";
+        const qrCode = new QRCodeStyling({
+          width: 200,
+          height: 200,
+          data: data.secure_url,
+          dotsOptions: { color: "#FFD700", type: "rounded" },
+          backgroundOptions: { color: "#0b132b" }
+        });
+        qrCode.append(document.getElementById("qrCode"));
+      } catch (err) {
+        statusDiv.textContent = "❌ Erro ao enviar vídeo: " + err.message;
+      }
+    }
 
-    alert("Vídeo enviado e QR Code gerado!");
-};
-</script>
+    initCamera();
+    startBtn.onclick = startRecording;
+    stopBtn.onclick = stopRecording;
+  </script>
 
 </body>
 </html>
