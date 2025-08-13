@@ -4,29 +4,157 @@
 <meta charset="UTF-8">
 <title>🎬 Hub Gravação 360°</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root { --azul:#0b132b; --dourado:#d4af37; }
 body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
 h2 { margin:20px 0; }
 button { padding:15px 25px; margin:10px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); box-shadow:0 6px 16px rgba(0,0,0,.25);}
+video { width:100%; max-height:40vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; }
+#qrCode { width:200px; height:200px; margin:20px auto; display:grid; place-items:center; border:2px solid var(--dourado); border-radius:12px; }
+#status { min-height:48px; margin:12px 0; font-weight:600; }
 </style>
 </head>
 <body>
-<h2>🎬 Hub de Gravação 360°</h2>
-<p>Use os botões abaixo para abrir cada efeito e controle de vídeo:</p>
+
+<h2>🎬 Hub Gravação 360° - Tudo Junto</h2>
 
 <div>
-  <button onclick="openPage('zoom.html')">Zoom Progressivo</button>
-  <button onclick="openPage('slow.html')">Slow Motion</button>
-  <button onclick="openPage('music.html')">Música de Fundo</button>
-  <button onclick="openPage('qrcode.html')">QR Code do Vídeo</button>
+  <button id="startAll">▶️ Iniciar Tudo</button>
 </div>
 
+<h3>Zoom Progressivo</h3>
+<video id="zoomVideo" autoplay muted playsinline></video>
+
+<h3>Slow Motion Orgânico</h3>
+<video id="slowVideo" autoplay muted playsinline></video>
+<canvas id="slowCanvas" style="display:none;"></canvas>
+
+<h3>Música de Fundo</h3>
+<audio id="bgMusic" loop>
+  <source src="music.mp3" type="audio/mp3">
+  Seu navegador não suporta áudio.
+</audio>
+
+<div id="status">⏳ Aguardando início...</div>
+<div id="qrCode"></div>
+
 <script>
-function openPage(url){
-  // Abre cada efeito em nova aba/janela
-  window.open(url,'_blank');
+const startBtn = document.getElementById('startAll');
+const zoomVideo = document.getElementById('zoomVideo');
+const slowVideo = document.getElementById('slowVideo');
+const slowCanvas = document.getElementById('slowCanvas');
+const ctx = slowCanvas.getContext('2d');
+const bgMusic = document.getElementById('bgMusic');
+const statusDiv = document.getElementById('status');
+const qrBox = document.getElementById('qrCode');
+
+const cloudName = 'dxobnhynf';
+const uploadPreset = 'plataforma_360';
+
+let mediaRecorder, chunks = [];
+let lastTime = Date.now();
+
+// --- Função QR ---
+function makeQR(url){
+  qrBox.innerHTML = '';
+  new QRCode(qrBox, { text:url, width:200, height:200, correctLevel:QRCode.CorrectLevel.H });
 }
+
+// --- Zoom Progressivo (simples exemplo) ---
+async function startZoom(){
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
+    zoomVideo.srcObject = stream;
+    zoomVideo.play();
+    // efeito zoom progressivo simples
+    let scale = 1;
+    function zoomLoop(){
+      zoomVideo.style.transform = `scale(${scale})`;
+      scale += 0.002; // aumenta zoom
+      if(scale<1.2) requestAnimationFrame(zoomLoop);
+    }
+    zoomLoop();
+  } catch(err){console.error('Erro Zoom:', err);}
+}
+
+// --- Slow Motion Orgânico ---
+async function startSlow(){
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
+    slowVideo.srcObject = stream;
+    slowVideo.play();
+
+    slowCanvas.width = slowVideo.videoWidth || 640;
+    slowCanvas.height = slowVideo.videoHeight || 480;
+
+    fluctuateSpeed();
+    drawFrame();
+    startRecording();
+  } catch(err){console.error('Erro Slow:', err);}
+}
+
+// Varia velocidade orgânica
+function fluctuateSpeed(){
+  setInterval(()=>{
+    let rate = 0.3 + Math.random()*1.2;
+    slowVideo.playbackRate = rate;
+  },100);
+}
+
+// Desenha frames no canvas
+function drawFrame(){
+  const now = Date.now();
+  const delta = now - lastTime;
+  const speedFactor = 0.5 + Math.random();
+  if(delta > 33/speedFactor){
+    ctx.drawImage(slowVideo,0,0,slowCanvas.width, slowCanvas.height);
+    lastTime = now;
+  }
+  requestAnimationFrame(drawFrame);
+}
+
+// Gravação automática slow
+function startRecording(){
+  const stream = slowCanvas.captureStream(30);
+  mediaRecorder = new MediaRecorder(stream, { mimeType:'video/webm;codecs=vp8' });
+  mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+  mediaRecorder.onstop = uploadVideo;
+  mediaRecorder.start();
+  statusDiv.textContent = '🔴 Gravando Slow Motion...';
+
+  setTimeout(()=>{
+    mediaRecorder.stop();
+    statusDiv.textContent = '⏳ Enviando vídeo...';
+  },10000);
+}
+
+// Envia para Cloudinary
+async function uploadVideo(){
+  const blob = new Blob(chunks,{type:'video/webm'});
+  const formData = new FormData();
+  formData.append('file', blob);
+  formData.append('upload_preset', uploadPreset);
+
+  try{
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`,{method:'POST',body:formData});
+    const data = await res.json();
+    if(!res.ok || data.error) throw new Error(data?.error?.message || ('HTTP '+res.status));
+    const url = data.secure_url;
+    statusDiv.innerHTML = `✅ Vídeo enviado!<br><a class="link" href="${url}" target="_blank">Abrir vídeo</a>`;
+    makeQR(url);
+  }catch(err){statusDiv.textContent='❌ Erro ao enviar vídeo: '+err.message;}
+}
+
+// --- Botão Iniciar Tudo ---
+startBtn.onclick = ()=>{
+  bgMusic.play();
+  startZoom();
+  startSlow();
+  startBtn.disabled = true;
+  statusDiv.textContent = '🎬 Tudo iniciado!';
+};
 </script>
+
 </body>
 </html>
