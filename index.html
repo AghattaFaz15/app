@@ -5,8 +5,8 @@
   <title>🎥 Gravação 360°</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Biblioteca de QR Code corrigida -->
-  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
+  <!-- Biblioteca de QR Code corrigida (versão estável no jsDelivr) -->
+  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>
 
   <style>
     body {
@@ -64,7 +64,7 @@
 
     // Configuração Cloudinary
     const cloudName = "dxobnhynf"; 
-    const uploadPreset = "plataforma_360"; // Certifique-se que é unsigned
+    const uploadPreset = "plataforma_360"; // Certifique-se que é unsigned no Cloudinary
 
     async function initCamera() {
       try {
