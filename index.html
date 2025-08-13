@@ -1,98 +1,103 @@
-<!DOCTYPE html><html lang="pt-BR">
+<!DOCTYPE html>
+<html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <title>🎥 Gravação 360°</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />  <!-- Biblioteca de QR Code estável (QRCodeJS) -->  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>  <style>
-    :root { --azul:#0b132b; --azul2:#091f36; --dourado:#d4af37; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif; text-align: center; background: var(--azul); color: #fff; margin: 0; }
-    h2 { background: var(--azul2); padding: 12px; border-bottom: 2px solid var(--dourado); margin: 0; }
-    video { width: 100%; max-height: 55vh; object-fit: cover; border-bottom: 3px solid var(--dourado); }
-    .bar { display:flex; gap:12px; justify-content:center; align-items:center; padding:14px 10px; border-top:2px solid var(--dourado); }
-    button { padding: 12px 22px; font-size: 18px; border: none; border-radius: 10px; cursor: pointer; color: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.25); }
-    #startBtn { background: #1abc9c; }
-    #stopBtn { background: #e74c3c; }
-    #status { min-height: 48px; margin: 8px 0 0; font-weight: 600; }
-    #qrCode { margin: 14px auto 30px; width: 200px; height: 200px; display:grid; place-items:center; background: #0b132b; border: 2px solid var(--dourado); border-radius: 12px; }
-    a.link { color: var(--dourado); text-decoration: underline; word-break: break-all; }
-  </style></head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plataforma 360</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #111;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+    video {
+      width: 100%;
+      max-width: 400px;
+      border: 2px solid #fff;
+      margin-top: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 10px;
+      background-color: gold;
+      color: black;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+  </style>
+</head>
 <body>
-  <h2>🎥 Gravação 360°</h2>
-  <video id="preview" autoplay playsinline></video>  <div class="bar">
-    <button id="startBtn">▶️ Gravar</button>
-    <button id="stopBtn" disabled>⏹ Parar</button>
-  </div>  <div id="status"></div>
-  <div id="qrCode"></div>  <script>
-    const video = document.getElementById('preview');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const statusDiv = document.getElementById('status');
-    const qrBox = document.getElementById('qrCode');
-    let mediaRecorder; let chunks = [];
+  <h1>🎥 Plataforma 360</h1>
+  <video id="preview" autoplay muted></video>
+  <br>
+  <button id="startBtn">🎬 Gravar</button>
+  <button id="stopBtn" disabled>⏹️ Parar</button>
+  <div id="qrcode"></div>
 
-    // Cloudinary (certifique-se que o preset é NÃO ASSINADO e permite VIDEO)
-    const cloudName = 'dxobnhynf';
-    const uploadPreset = 'plataforma_360';
+  <script>
+    const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dxobnhynf/video/upload";
+    const CLOUDINARY_UPLOAD_PRESET = "Plataforma_360";
 
-    async function initCamera(){
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        video.srcObject = stream;
-        try { mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' }); }
-        catch(_) { mediaRecorder = new MediaRecorder(stream); }
-        mediaRecorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-        mediaRecorder.onstop = uploadVideo;
-      } catch (err){
-        alert('Erro ao acessar a câmera: ' + err.message);
-      }
-    }
+    let mediaRecorder;
+    let recordedChunks = [];
+    const preview = document.getElementById("preview");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const qrcodeContainer = document.getElementById("qrcode");
 
-    function startRecording(){
-      chunks = [];
-      mediaRecorder.start();
-      startBtn.disabled = true; stopBtn.disabled = false;
-      statusDiv.textContent = '🔴 Gravando...';
-      qrBox.innerHTML = '';
-    }
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        preview.srcObject = stream;
+        mediaRecorder = new MediaRecorder(stream);
 
-    function stopRecording(){
-      mediaRecorder.stop();
-      startBtn.disabled = false; stopBtn.disabled = true;
-      statusDiv.textContent = '⏳ Enviando vídeo...';
-    }
+        mediaRecorder.ondataavailable = event => {
+          if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        };
 
-    function makeQR(url){
-      qrBox.innerHTML = '';
-      new QRCode(qrBox, {
-        text: url,
-        width: 200,
-        height: 200,
-        correctLevel: QRCode.CorrectLevel.H
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(recordedChunks, { type: "video/mp4" });
+          recordedChunks = [];
+          const formData = new FormData();
+          formData.append("file", blob);
+          formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+          const response = await fetch(CLOUDINARY_URL, { method: "POST", body: formData });
+          const data = await response.json();
+
+          if (data.secure_url) {
+            // Adiciona slow motion e zoom no link
+            const transformedUrl = data.secure_url.replace("/upload/", "/upload/e_slow_motion:50,e_zoom:2/");
+            qrcodeContainer.innerHTML = "";
+            new QRCode(qrcodeContainer, {
+              text: transformedUrl,
+              width: 200,
+              height: 200
+            });
+          } else {
+            alert("Erro ao enviar vídeo para o Cloudinary.");
+          }
+        };
       });
-    }
 
-    async function uploadVideo(){
-      const blob = new Blob(chunks, { type: 'video/webm' });
-      const formData = new FormData();
-      formData.append('file', blob);
-      formData.append('upload_preset', uploadPreset);
+    startBtn.addEventListener("click", () => {
+      recordedChunks = [];
+      mediaRecorder.start();
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+    });
 
-      try {
-        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, { method: 'POST', body: formData });
-        const data = await res.json();
-        if (!res.ok || data.error){
-          const msg = data?.error?.message || ('HTTP ' + res.status);
-          throw new Error(msg);
-        }
-        const url = data.secure_url;
-        statusDiv.innerHTML = `✅ Vídeo enviado!<br><a class="link" href="${url}" target="_blank">Abrir vídeo</a>`;
-        makeQR(url);
-      } catch (err){
-        statusDiv.textContent = '❌ Erro ao enviar vídeo: ' + err.message;
-      }
-    }
-
-    initCamera();
-    startBtn.onclick = startRecording;
-    stopBtn.onclick = stopRecording;
-  </script></body>
+    stopBtn.addEventListener("click", () => {
+      mediaRecorder.stop();
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    });
+  </script>
+</body>
 </html>
