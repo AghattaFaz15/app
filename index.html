@@ -2,25 +2,31 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>🎥 Gravação 360° - Hub</title>
+<title>🎬 Hub Gravação 360°</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-:root { --azul:#0b132b; --azul2:#091f36; --dourado:#d4af37; }
-body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif; text-align: center; background: var(--azul); color: #fff; margin: 0; }
-h2 { background: var(--azul2); padding: 12px; border-bottom: 2px solid var(--dourado); margin: 0; }
-.bar { display:flex; flex-direction:column; gap:12px; justify-content:center; align-items:center; padding:20px; }
-button { padding: 14px 28px; font-size: 18px; border: none; border-radius: 10px; cursor: pointer; color: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.25); width: 200px; }
-#zoomBtn { background:#1abc9c; }
-#slowBtn { background:#e67e22; }
-#musicBtn { background:#9b59b6; }
+:root { --azul:#0b132b; --dourado:#d4af37; }
+body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
+h2 { margin:20px 0; }
+button { padding:15px 25px; margin:10px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); box-shadow:0 6px 16px rgba(0,0,0,.25);}
 </style>
 </head>
 <body>
-<h2>🎥 Gravação 360° - Hub</h2>
-<div class="bar">
-  <button id="zoomBtn" onclick="location.href='zoom.html'">Zoom Progressivo</button>
-  <button id="slowBtn" onclick="location.href='slow.html'">Slow Motion</button>
-  <button id="musicBtn" onclick="location.href='music.html'">Música & Fade</button>
+<h2>🎬 Hub de Gravação 360°</h2>
+<p>Use os botões abaixo para abrir cada efeito e controle de vídeo:</p>
+
+<div>
+  <button onclick="openPage('zoom.html')">Zoom Progressivo</button>
+  <button onclick="openPage('slow.html')">Slow Motion</button>
+  <button onclick="openPage('music.html')">Música de Fundo</button>
+  <button onclick="openPage('qrcode.html')">QR Code do Vídeo</button>
 </div>
+
+<script>
+function openPage(url){
+  // Abre cada efeito em nova aba/janela
+  window.open(url,'_blank');
+}
+</script>
 </body>
 </html>
