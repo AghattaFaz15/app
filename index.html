@@ -1,143 +1,26 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <title>🎥 Gravação 360°</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />  
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>  
-  <style>
-    :root { --azul:#0b132b; --azul2:#091f36; --dourado:#d4af37; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif; text-align: center; background: var(--azul); color: #fff; margin: 0; }
-    h2 { background: var(--azul2); padding: 12px; border-bottom: 2px solid var(--dourado); margin: 0; }
-    video { 
-      width: 100%; 
-      max-height: 55vh; 
-      object-fit: cover; 
-      border-bottom: 3px solid var(--dourado); 
-      transition: transform 0.5s ease, filter 0.5s ease; /* para zoom e efeito suave */ 
-    }
-    .bar { display:flex; gap:12px; justify-content:center; align-items:center; padding:14px 10px; border-top:2px solid var(--dourado); }
-    button { padding: 12px 22px; font-size: 18px; border: none; border-radius: 10px; cursor: pointer; color: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.25); }
-    #startBtn { background: #1abc9c; }
-    #stopBtn { background: #e74c3c; }
-    #status { min-height: 48px; margin: 8px 0 0; font-weight: 600; }
-    #qrCode { margin: 14px auto 30px; width: 200px; height: 200px; display:grid; place-items:center; background: #0b132b; border: 2px solid var(--dourado); border-radius: 12px; }
-    a.link { color: var(--dourado); text-decoration: underline; word-break: break-all; }
-  </style>
+<meta charset="UTF-8">
+<title>🎥 Gravação 360° - Hub</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+:root { --azul:#0b132b; --azul2:#091f36; --dourado:#d4af37; }
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif; text-align: center; background: var(--azul); color: #fff; margin: 0; }
+h2 { background: var(--azul2); padding: 12px; border-bottom: 2px solid var(--dourado); margin: 0; }
+.bar { display:flex; flex-direction:column; gap:12px; justify-content:center; align-items:center; padding:20px; }
+button { padding: 14px 28px; font-size: 18px; border: none; border-radius: 10px; cursor: pointer; color: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.25); width: 200px; }
+#zoomBtn { background:#1abc9c; }
+#slowBtn { background:#e67e22; }
+#musicBtn { background:#9b59b6; }
+</style>
 </head>
 <body>
-  <h2>🎥 Gravação 360°</h2>
-  <video id="preview" autoplay playsinline></video>  
-
-  <div class="bar">
-    <button id="startBtn">▶️ Gravar</button>
-    <button id="stopBtn" disabled>⏹ Parar</button>
-  </div>  
-
-  <div id="status"></div>
-  <div id="qrCode"></div>  
-
-  <script>
-    const video = document.getElementById('preview');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const statusDiv = document.getElementById('status');
-    const qrBox = document.getElementById('qrCode');
-    let mediaRecorder; 
-    let chunks = [];
-
-    // Cloudinary (preset NÃO ASSINADO e permite VIDEO)
-    const cloudName = 'dxobnhynf';
-    const uploadPreset = 'plataforma_360';
-
-    async function initCamera(){
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        video.srcObject = stream;
-
-        try { mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' }); }
-        catch(_) { mediaRecorder = new MediaRecorder(stream); }
-
-        mediaRecorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-        mediaRecorder.onstop = uploadVideo;
-
-      } catch (err){
-        alert('Erro ao acessar a câmera: ' + err.message);
-      }
-    }
-
-    function startRecording(){
-      chunks = [];
-      mediaRecorder.start();
-      startBtn.disabled = true; 
-      stopBtn.disabled = false;
-      statusDiv.textContent = '🔴 Gravando...';
-      qrBox.innerHTML = '';
-
-      setSlowMotion(true); // ativa slow motion na pré-visualização
-    }
-
-    function stopRecording(){
-      mediaRecorder.stop();
-      startBtn.disabled = false; 
-      stopBtn.disabled = true;
-      statusDiv.textContent = '⏳ Enviando vídeo...';
-      setSlowMotion(false); // volta velocidade normal
-    }
-
-    function makeQR(url){
-      qrBox.innerHTML = '';
-      new QRCode(qrBox, {
-        text: url,
-        width: 200,
-        height: 200,
-        correctLevel: QRCode.CorrectLevel.H
-      });
-    }
-
-    async function uploadVideo(){
-      const blob = new Blob(chunks, { type: 'video/webm' });
-      const formData = new FormData();
-      formData.append('file', blob);
-      formData.append('upload_preset', uploadPreset);
-
-      try {
-        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, { method: 'POST', body: formData });
-        const data = await res.json();
-
-        if (!res.ok || data.error){
-          const msg = data?.error?.message || ('HTTP ' + res.status);
-          throw new Error(msg);
-        }
-
-        const url = data.secure_url;
-        statusDiv.innerHTML = `✅ Vídeo enviado!<br><a class="link" href="${url}" target="_blank">Abrir vídeo</a>`;
-        makeQR(url);
-
-      } catch (err){
-        statusDiv.textContent = '❌ Erro ao enviar vídeo: ' + err.message;
-      }
-    }
-
-    // --- SLOW MOTION e ZOOM ---
-    function setSlowMotion(enable){
-      video.playbackRate = enable ? 0.5 : 1; // metade da velocidade
-    }
-
-    function setZoom(level){
-      video.style.transform = `scale(${level})`;
-    }
-
-    // Zoom suave ao passar o mouse / tocar
-    video.addEventListener('mouseenter', () => setZoom(1.2));
-    video.addEventListener('mouseleave', () => setZoom(1));
-    video.addEventListener('touchstart', () => setZoom(1.2));
-    video.addEventListener('touchend', () => setZoom(1));
-
-    // Inicializa câmera
-    initCamera();
-    startBtn.onclick = startRecording;
-    stopBtn.onclick = stopRecording;
-  </script>
+<h2>🎥 Gravação 360° - Hub</h2>
+<div class="bar">
+  <button id="zoomBtn" onclick="location.href='zoom.html'">Zoom Progressivo</button>
+  <button id="slowBtn" onclick="location.href='slow.html'">Slow Motion</button>
+  <button id="musicBtn" onclick="location.href='music.html'">Música & Fade</button>
+</div>
 </body>
 </html>
