@@ -2,9 +2,12 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Gravação 360°</title>
+  <title>🎥 Gravação 360°</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qr-code-styling/1.6.0/qr-code-styling.min.js"></script>
+
+  <!-- Biblioteca de QR Code corrigida -->
+  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
+
   <style>
     body {
       font-family: sans-serif;
@@ -13,6 +16,12 @@
       color: white;
       margin: 0;
       padding: 0;
+    }
+    h2 {
+      background: #091f36;
+      padding: 10px;
+      border-bottom: 2px solid gold;
+      margin: 0;
     }
     video {
       width: 100%;
@@ -25,18 +34,11 @@
       border: none;
       border-radius: 8px;
       cursor: pointer;
-    }
-    #startBtn {
-      background: #1abc9c;
       color: white;
     }
-    #stopBtn {
-      background: #e74c3c;
-      color: white;
-    }
-    #qrCode {
-      margin-top: 20px;
-    }
+    #startBtn { background: #1abc9c; }
+    #stopBtn { background: #e74c3c; }
+    #qrCode { margin-top: 20px; }
   </style>
 </head>
 <body>
@@ -60,9 +62,9 @@
     let mediaRecorder;
     let chunks = [];
 
-    // Config Cloudinary
+    // Configuração Cloudinary
     const cloudName = "dxobnhynf"; 
-    const uploadPreset = "plataforma_360"; // ⚠️ Troque se usar outro nome
+    const uploadPreset = "plataforma_360"; // Certifique-se que é unsigned
 
     async function initCamera() {
       try {
@@ -112,7 +114,7 @@
 
         statusDiv.innerHTML = `✅ Vídeo enviado!<br><a href="${data.secure_url}" target="_blank" style="color: gold;">Abrir Vídeo</a>`;
 
-        // Gera QR Code
+        // Gerar QR Code
         document.getElementById("qrCode").innerHTML = "";
         const qrCode = new QRCodeStyling({
           width: 200,
