@@ -2,107 +2,127 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Vídeo Cinemático com QRCode</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Câmera com Slow, Zoom e QRCode</title>
 <style>
   body {
     background: black;
     color: white;
+    font-family: Arial, sans-serif;
     text-align: center;
-    font-family: sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+  #container-gravacao, #container-visualizacao, #container-qrcode {
+    display: none;
+    padding: 20px;
   }
   video {
-    max-width: 100%;
-    transform-origin: center center;
+    width: 100%;
+    max-width: 500px;
+    border: 2px solid gold;
+    border-radius: 10px;
+  }
+  button {
+    padding: 10px 20px;
+    margin-top: 10px;
+    font-size: 16px;
+    background: gold;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
   }
 </style>
 </head>
 <body>
 
-<h1>🎥 Gravando com Efeito Cinemático</h1>
-<video id="preview" autoplay playsinline></video>
-<br>
-<button id="startBtn">🎬 Iniciar Gravação</button>
-<button id="stopBtn" disabled>⏹ Parar</button>
-<div id="downloadArea"></div>
-<canvas id="qrCanvas"></canvas>
+<div id="container-gravacao">
+  <h2>🎥 Gravação</h2>
+  <video id="preview" autoplay playsinline></video>
+  <br>
+  <button id="startBtn">🎬 Gravar</button>
+</div>
 
-<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<div id="container-visualizacao">
+  <h2>▶️ Visualização</h2>
+  <video id="playback" controls></video>
+  <br>
+  <button id="gerarQRBtn">📱 Gerar QR Code</button>
+</div>
+
+<div id="container-qrcode">
+  <h2>📱 QR Code</h2>
+  <div id="qrcode"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 let mediaRecorder;
 let recordedChunks = [];
 let stream;
-const preview = document.getElementById('preview');
 
-async function initCamera() {
+// Inicia câmera
+async function startCamera() {
   stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: { exact: "environment" },
-      zoom: 3 // valor inicial, navegador ajusta se suportar
-    },
+    video: { facingMode: { exact: "environment" }, zoom: true },
     audio: true
   });
-  preview.srcObject = stream;
+  document.getElementById('preview').srcObject = stream;
+  document.getElementById('container-gravacao').style.display = 'block';
 }
+startCamera();
 
-document.getElementById('startBtn').onclick = () => {
+// Botão Gravar
+document.getElementById('startBtn').addEventListener('click', () => {
   recordedChunks = [];
   mediaRecorder = new MediaRecorder(stream);
-  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-  mediaRecorder.onstop = playVideoWithEffects;
+
+  mediaRecorder.ondataavailable = e => {
+    if (e.data.size > 0) recordedChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const playback = document.getElementById('playback');
+    playback.src = url;
+
+    // Alternar zoom
+    playback.style.transformOrigin = "center center";
+    playback.animate([
+      { transform: "scale(1)" },
+      { transform: "scale(1.5)" },
+      { transform: "scale(1)" }
+    ], { duration: 4000, iterations: Infinity });
+
+    // Alternar velocidade
+    let slow = true;
+    setInterval(() => {
+      playback.playbackRate = slow ? 0.5 : 2;
+      slow = !slow;
+    }, 4000);
+
+    document.getElementById('container-gravacao').style.display = 'none';
+    document.getElementById('container-visualizacao').style.display = 'block';
+  };
+
   mediaRecorder.start();
-  document.getElementById('startBtn').disabled = true;
-  document.getElementById('stopBtn').disabled = false;
-};
 
-document.getElementById('stopBtn').onclick = () => {
-  mediaRecorder.stop();
-  document.getElementById('startBtn').disabled = false;
-  document.getElementById('stopBtn').disabled = true;
-};
+  // Para automaticamente em 10s
+  setTimeout(() => mediaRecorder.stop(), 10000);
+});
 
-function playVideoWithEffects() {
-  const blob = new Blob(recordedChunks, { type: "video/webm" });
+// Gerar QR Code
+document.getElementById('gerarQRBtn').addEventListener('click', () => {
+  const blob = new Blob(recordedChunks, { type: 'video/webm' });
   const url = URL.createObjectURL(blob);
+  document.getElementById('qrcode').innerHTML = '';
+  new QRCode(document.getElementById('qrcode'), url);
 
-  // Cria um player separado para os efeitos
-  const player = document.createElement('video');
-  player.src = url;
-  player.autoplay = true;
-  player.controls = true;
-  player.loop = true;
-  document.body.appendChild(player);
-
-  // Animação de zoom orgânico
-  player.animate([
-    { transform: "scale(1)" },
-    { transform: "scale(1.2)" },
-    { transform: "scale(1)" }
-  ], {
-    duration: 4000,
-    iterations: Infinity
-  });
-
-  // Alternar velocidade lento/rápido
-  let speeds = [0.5, 2];
-  let i = 0;
-  setInterval(() => {
-    player.playbackRate = speeds[i % speeds.length];
-    i++;
-  }, 4000);
-
-  // Gera link e QR Code
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'video_cinematico.webm';
-  a.textContent = '📥 Baixar Vídeo';
-  document.getElementById('downloadArea').appendChild(a);
-
-  QRCode.toCanvas(document.getElementById('qrCanvas'), url, { width: 200 }, function (error) {
-    if (error) console.error(error);
-  });
-}
-
-initCamera();
+  document.getElementById('container-visualizacao').style.display = 'none';
+  document.getElementById('container-qrcode').style.display = 'block';
+});
 </script>
+
 </body>
 </html>
