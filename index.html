@@ -3,97 +3,106 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gravação de Vídeo</title>
+<title>Câmera Slow Motion + QR Code</title>
 <style>
   body {
     font-family: Arial, sans-serif;
-    background: #001f3f;
-    color: white;
     text-align: center;
-    padding: 20px;
+    background: #000;
+    color: #fff;
   }
   video {
-    width: 90%;
-    max-width: 400px;
-    border: 3px solid gold;
+    width: 100%;
+    max-height: 70vh;
+    border: 2px solid gold;
     border-radius: 10px;
-    margin-bottom: 10px;
   }
   button {
+    margin: 10px;
     padding: 10px 20px;
-    margin: 5px;
-    border: none;
     background: gold;
-    color: black;
-    font-weight: bold;
+    border: none;
     border-radius: 5px;
+    font-size: 16px;
     cursor: pointer;
   }
-  #downloadLink {
-    display: none;
-    margin-top: 10px;
+  #qrcode {
+    margin-top: 20px;
   }
 </style>
 </head>
 <body>
 
-<h1>🎥 Gravação de Vídeo</h1>
-
-<video id="preview" autoplay playsinline muted></video>
+<h2>🎥 Slow Motion com Zoom + QR Code</h2>
+<video id="preview" autoplay playsinline muted></video><br>
+<button id="startBtn">▶ Iniciar Gravação</button>
+<button id="stopBtn" disabled>⏹ Parar</button>
 <video id="playback" controls style="display:none;"></video>
+<div id="qrcode"></div>
 
-<div>
-  <button id="startBtn">Iniciar Gravação</button>
-  <button id="stopBtn" disabled>Parar Gravação</button>
-</div>
-
-<a id="downloadLink" download="video.mp4">📥 Baixar Vídeo</a>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 let mediaRecorder;
 let recordedChunks = [];
 let stream;
 
-document.getElementById("startBtn").addEventListener("click", async () => {
+async function startCamera() {
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { exact: "environment" }, // câmera traseira
+        frameRate: { ideal: 120 }, // tenta slow motion real
+        zoom: 3 // tentativa de zoom
+      },
+      audio: false
+    });
+
+    // Aplica zoom máximo possível
+    const track = stream.getVideoTracks()[0];
+    const capabilities = track.getCapabilities();
+    if (capabilities.zoom) {
+      await track.applyConstraints({ advanced: [{ zoom: capabilities.zoom.max }] });
+    }
+
     document.getElementById("preview").srcObject = stream;
-
-    recordedChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
-    
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
-    };
-    
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(recordedChunks, { type: "video/mp4" });
-      const url = URL.createObjectURL(blob);
-
-      const playback = document.getElementById("playback");
-      playback.src = url;
-      playback.style.display = "block";
-
-      const link = document.getElementById("downloadLink");
-      link.href = url;
-      link.style.display = "block";
-    };
-    
-    mediaRecorder.start();
-    document.getElementById("startBtn").disabled = true;
-    document.getElementById("stopBtn").disabled = false;
-
   } catch (err) {
-    alert("Erro ao acessar câmera/microfone: " + err);
+    alert("Erro ao acessar câmera: " + err);
+    console.error(err);
   }
-});
+}
 
-document.getElementById("stopBtn").addEventListener("click", () => {
+document.getElementById("startBtn").onclick = () => {
+  recordedChunks = [];
+  mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+  mediaRecorder.ondataavailable = e => {
+    if (e.data.size > 0) recordedChunks.push(e.data);
+  };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+
+    const playback = document.getElementById("playback");
+    playback.src = url;
+    playback.style.display = "block";
+    playback.playbackRate = 0.25; // deixa lento na reprodução
+    playback.play();
+
+    // Gera QR Code do link
+    document.getElementById("qrcode").innerHTML = "";
+    new QRCode(document.getElementById("qrcode"), url);
+  };
+  mediaRecorder.start();
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
+};
+
+document.getElementById("stopBtn").onclick = () => {
   mediaRecorder.stop();
-  stream.getTracks().forEach(track => track.stop());
+  document.getElementById("startBtn").disabled = false;
   document.getElementById("stopBtn").disabled = true;
-});
-</script>
+};
 
+startCamera();
+</script>
 </body>
 </html>
