@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>🎬 Zoom + Slow/Speed Orgânico</title>
+<title>🎬 Zoom + Slow 6x</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 :root { --azul:#0b132b; --dourado:#d4af37; }
@@ -14,7 +14,7 @@ canvas { display:none; }
 </head>
 <body>
 
-<h2>🎬 Zoom + Slow/Speed Orgânico</h2>
+<h2>🎬 Zoom + Slow Motion 6x</h2>
 
 <video id="mainVideo" autoplay muted playsinline></video>
 <canvas id="videoCanvas"></canvas>
@@ -28,13 +28,17 @@ let mediaRecorder, chunks = [];
 let stream;
 let recording = false;
 let animFrame;
-const captureDuration = 10000; // 10 segundos "reais"
+
+// --- Duração e Zoom ---
+const captureDuration = 10000; // 10 segundos reais
 const zoomMax = 2;
 const zoomMin = 1;
+let zoomScale = 1;
+let zoomDirection = 0.008;
 
-// --- Inicializa câmera ---
+// --- Inicializa câmera (som desligado) ---
 async function initCamera(){
-  stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:true });
+  stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
   mainVideo.srcObject = stream;
   await mainVideo.play();
   canvas.width = mainVideo.videoWidth || 640;
@@ -42,30 +46,27 @@ async function initCamera(){
 }
 
 // --- Zoom orgânico ---
-let zoomScale = 1;
-let zoomDirection = 0.008;
 function getZoom(){ 
   zoomScale += zoomDirection; 
   if(zoomScale > zoomMax || zoomScale < zoomMin) zoomDirection *= -1;
   return zoomScale;
 }
 
-// --- Slow/Speed orgânico perceptível ---
+// --- Slow perceptível 6x ---
 let lastFrameTime = 0;
 let lastFrameImage = null;
-function getSlowMultiplier(){
-  // alterna dramaticamente entre 0.1x (super lento) e 3x (super rápido)
-  return 0.1 + Math.random()*2.9;
+function getSlowFactor(){
+  return 6.0; // 6x slow
 }
 
-// --- Desenha no canvas com slow/fast ---
+// --- Desenha no canvas com slow ---
 function drawFrame(){
   if(!recording) return;
 
   const now = Date.now();
-  const slowMult = getSlowMultiplier();
-  
-  if(!lastFrameTime || now - lastFrameTime >= (33 / slowMult)){
+  const slowFactor = getSlowFactor();
+
+  if(!lastFrameTime || now - lastFrameTime >= (33 / slowFactor)){
     lastFrameTime = now;
 
     const scale = getZoom();
@@ -80,7 +81,6 @@ function drawFrame(){
 
     lastFrameImage = ctx.getImageData(0,0,canvas.width,canvas.height);
   } else if(lastFrameImage){
-    // mantém frame anterior para efeito lento
     ctx.putImageData(lastFrameImage, 0, 0);
   }
 
@@ -100,7 +100,7 @@ function startRecording(){
 
   drawFrame();
 
-  // para gravação após 10 segundos "reais"
+  // grava 10s reais, slow prolonga vídeo
   setTimeout(stopRecording, captureDuration);
 }
 
