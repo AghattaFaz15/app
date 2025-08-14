@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slow Motion</title>
+<style>
+  body {
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    color: white;
+    font-family: Arial, sans-serif;
+  }
+  video {
+    width: 90%;
+    max-width: 600px;
+    margin-top: 20px;
+    border: 2px solid gold;
+    border-radius: 10px;
+  }
+  button {
+    padding: 12px 20px;
+    background: gold;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+    font-weight: bold;
+    color: black;
+  }
+</style>
+</head>
+<body>
+
+<h1>🎥 Slow Motion 6x</h1>
+<button id="startBtn">🎬 Gravar 10s</button>
+<video id="preview" autoplay muted playsinline></video>
+<video id="finalVideo" controls></video>
+
+<script>
+let mediaRecorder;
+let recordedChunks = [];
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+    recordedChunks = [];
+
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    document.getElementById('preview').srcObject = stream;
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+    mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const videoURL = URL.createObjectURL(blob);
+        
+        // Criar vídeo para aplicar slow
+        const tempVideo = document.createElement('video');
+        tempVideo.src = videoURL;
+        await tempVideo.play();
+
+        // Reproduzir em slow motion
+        tempVideo.playbackRate = 1/6; // Slow 6x
+
+        // Capturar o slow em canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = tempVideo.videoWidth;
+        canvas.height = tempVideo.videoHeight;
+        const ctx = canvas.getContext('2d');
+
+        const finalChunks = [];
+        const finalStream = canvas.captureStream(30); // 30 fps
+        const slowRecorder = new MediaRecorder(finalStream, { mimeType: 'video/webm' });
+
+        slowRecorder.ondataavailable = e => {
+            if (e.data.size > 0) finalChunks.push(e.data);
+        };
+
+        slowRecorder.onstop = () => {
+            const finalBlob = new Blob(finalChunks, { type: 'video/webm' });
+            const finalURL = URL.createObjectURL(finalBlob);
+            document.getElementById('finalVideo').src = finalURL;
+        };
+
+        slowRecorder.start();
+
+        function drawFrame() {
+            if (!tempVideo.paused && !tempVideo.ended) {
+                ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
+                requestAnimationFrame(drawFrame);
+            }
+        }
+        drawFrame();
+
+        tempVideo.onended = () => slowRecorder.stop();
+    };
+
+    mediaRecorder.start();
+    setTimeout(() => mediaRecorder.stop(), 10000); // grava 10s
+});
+</script>
+
+</body>
+</html>
