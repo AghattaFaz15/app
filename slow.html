@@ -2,105 +2,104 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>🎬 Slow Motion Profissional</title>
+<title>Slow Motion Profissional</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 :root { --azul:#0b132b; --dourado:#d4af37; }
 body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
 h2 { margin:20px 0; }
-video { display:none; }
-canvas { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; }
+button { padding:12px 22px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); margin:10px; box-shadow:0 6px 16px rgba(0,0,0,.25);}
+video { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; }
+canvas { display:none; }
+#status { min-height:48px; margin:12px 0; font-weight:600; }
 </style>
 </head>
 <body>
 
 <h2>🎬 Slow Motion Profissional</h2>
-<video id="mainVideo" autoplay muted playsinline></video>
+<button id="startBtn">▶️ Gravar 10s</button>
+
+<video id="previewVideo" autoplay muted playsinline></video>
 <canvas id="videoCanvas"></canvas>
 
+<div id="status">⏳ Aguardando...</div>
+
 <script>
-const mainVideo = document.getElementById('mainVideo');
+const startBtn = document.getElementById('startBtn');
+const previewVideo = document.getElementById('previewVideo');
 const canvas = document.getElementById('videoCanvas');
 const ctx = canvas.getContext('2d');
+const statusDiv = document.getElementById('status');
 
 let stream;
+let frames = [];
 let recording = false;
-let frameHistory = [];
-let currentFrameIndex = 0;
 
-const baseDuration = 10000; // 10s reais
-const slowFactor = 2.0; // 2x slow (final ~20s), pode aumentar para 6x se quiser
-const captureFPS = 30; // fps da captura
-
-// Inicializa câmera
+// --- Inicializa câmera ---
 async function initCamera(){
   stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
-  mainVideo.srcObject = stream;
-  await mainVideo.play();
-  canvas.width = mainVideo.videoWidth || 640;
-  canvas.height = mainVideo.videoHeight || 480;
+  previewVideo.srcObject = stream;
+  await previewVideo.play();
+  canvas.width = previewVideo.videoWidth || 640;
+  canvas.height = previewVideo.videoHeight || 480;
 }
 
-// Captura frames reais
-function captureFrame(){
-  const frame = document.createElement('canvas');
-  frame.width = canvas.width;
-  frame.height = canvas.height;
-  frame.getContext('2d').drawImage(mainVideo, 0, 0, canvas.width, canvas.height);
-  frameHistory.push(frame);
-}
-
-// Desenha slow motion (duplica frames)
-function drawFrame(){
-  if(!recording) return;
-  if(currentFrameIndex >= frameHistory.length) currentFrameIndex = frameHistory.length -1;
-
-  const frame = frameHistory[Math.floor(currentFrameIndex)];
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
-
-  // Avança frame baseado no slow factor
-  currentFrameIndex += 1/slowFactor;
-
-  requestAnimationFrame(drawFrame);
-}
-
-// Inicia gravação
-async function startRecording(){
-  frameHistory = [];
-  currentFrameIndex = 0;
+// --- Captura frames reais ---
+function captureFrames(duration=10000){
+  frames = [];
   recording = true;
+  const startTime = performance.now();
 
-  // captura frames durante baseDuration
-  const captureInterval = setInterval(captureFrame, 1000/captureFPS);
-
-  setTimeout(()=>{
-    clearInterval(captureInterval);
-
-    // grava via canvas
-    const canvasStream = canvas.captureStream(captureFPS);
-    const mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
-    let chunks = [];
-    mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
-    mediaRecorder.onstop = ()=>{
-      const blob = new Blob(chunks,{type:'video/webm'});
-      // envia para o index
-      window.parent.postMessage({ videoBlob: blob }, '*');
-    };
-    mediaRecorder.start();
-    drawFrame();
-
-    // define duração final do vídeo com slow
-    setTimeout(()=>{
+  function step(){
+    if(!recording) return;
+    const now = performance.now();
+    if(now - startTime >= duration){
       recording = false;
-      mediaRecorder.stop();
-    }, baseDuration*slowFactor);
-
-  }, baseDuration);
+      statusDiv.textContent = '⏳ Processando slow motion...';
+      createSlowVideo();
+      return;
+    }
+    ctx.drawImage(previewVideo, 0, 0, canvas.width, canvas.height);
+    frames.push(ctx.getImageData(0,0,canvas.width,canvas.height));
+    requestAnimationFrame(step);
+  }
+  step();
 }
 
-// Inicia tudo
-initCamera().then(startRecording);
+// --- Cria vídeo slow motion ---
+async function createSlowVideo(slowFactor=2.0){
+  const stream = canvas.captureStream(30);
+  const mediaRecorder = new MediaRecorder(stream, { mimeType:'video/webm;codecs=vp8' });
+  let chunks = [];
+
+  mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+  mediaRecorder.start();
+
+  // Desenha frames duplicados para slow
+  for(let i=0;i<frames.length;i++){
+    const repeat = Math.floor(slowFactor); // quantas vezes repetir cada frame
+    for(let j=0;j<repeat;j++){
+      ctx.putImageData(frames[i],0,0);
+      await new Promise(r=>setTimeout(r,33)); // 30fps
+    }
+  }
+
+  mediaRecorder.stop();
+  mediaRecorder.onstop = ()=>{
+    const blob = new Blob(chunks,{type:'video/webm'});
+    const url = URL.createObjectURL(blob);
+    statusDiv.innerHTML = `✅ Vídeo slow pronto!<br><a href="${url}" target="_blank">Abrir vídeo</a>`;
+    // envia para index gerar QR code
+    window.parent.postMessage({ videoBlob: blob }, '*');
+  };
+}
+
+// --- Botão ---
+startBtn.onclick = async ()=>{
+  startBtn.disabled = true;
+  if(!stream) await initCamera();
+  captureFrames(10000); // 10 segundos reais
+};
 </script>
 </body>
 </html>
