@@ -20,7 +20,7 @@
   }
 
   #container-gravacao {
-    display: block; /* container de gravação inicial sempre visível */
+    display: block; /* sempre visível inicialmente */
   }
 
   video {
@@ -28,7 +28,9 @@
     max-width: 500px;
     border: 2px solid gold;
     border-radius: 10px;
-    /* Container fixo: sem zoom aqui */
+    display: block;
+    margin: 0 auto;
+    transform-origin: center center; /* para zoom no vídeo, não container */
   }
 
   button {
@@ -94,13 +96,14 @@ document.getElementById('startBtn').addEventListener('click', () => {
     const playback = document.getElementById('playback');
     playback.src = url;
 
-    // Aplicar zoom e slow motion apenas no playback
-    playback.style.transformOrigin = "center center";
-    playback.animate([
-      { transform: "scale(1)" },
-      { transform: "scale(1.5)" },
-      { transform: "scale(1)" }
-    ], { duration: 4000, iterations: Infinity });
+    // Zoom e slow motion só no playback
+    let scale = 1;
+    let growing = true;
+    setInterval(() => {
+      scale = growing ? 1.5 : 1;
+      playback.style.transform = `scale(${scale})`;
+      growing = !growing;
+    }, 4000);
 
     let slow = true;
     setInterval(() => {
