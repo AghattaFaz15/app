@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Câmera com Slow, Zoom e QRCode</title>
+<title>Vídeo com Zoom Orgânico</title>
 <style>
   body {
     background: black;
@@ -23,14 +23,20 @@
     display: block; /* visível inicialmente */
   }
 
-  video {
+  /* Container fixo */
+  .video-wrapper {
     width: 100%;
     max-width: 500px;
+    margin: 0 auto;
+    overflow: hidden; /* impede que o vídeo “estoure” o container */
     border: 2px solid gold;
     border-radius: 10px;
+  }
+
+  video {
+    width: 100%;
     display: block;
-    margin: 0 auto;
-    transform-origin: center center; /* para zoom funcionar no vídeo */
+    transform-origin: center center;
   }
 
   button {
@@ -48,14 +54,18 @@
 
 <div id="container-gravacao">
   <h2>🎥 Gravação</h2>
-  <video id="preview" autoplay playsinline></video>
+  <div class="video-wrapper">
+    <video id="preview" autoplay playsinline></video>
+  </div>
   <br>
   <button id="startBtn">🎬 Gravar</button>
 </div>
 
 <div id="container-visualizacao">
   <h2>▶️ Visualização</h2>
-  <video id="playback" controls></video>
+  <div class="video-wrapper">
+    <video id="playback" controls></video>
+  </div>
   <br>
   <button id="gerarQRBtn">📱 Gerar QR Code</button>
 </div>
@@ -74,7 +84,7 @@ let stream;
 // Inicia câmera sem áudio
 async function startCamera() {
   stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "environment" } // sem áudio
+    video: { facingMode: "environment" }
   });
   document.getElementById('preview').srcObject = stream;
 }
@@ -99,21 +109,18 @@ document.getElementById('startBtn').addEventListener('click', () => {
     document.getElementById('container-gravacao').style.display = 'none';
     document.getElementById('container-visualizacao').style.display = 'block';
 
-    // Ativa zoom orgânico apenas depois que o vídeo aparecer
     startOrganicZoom(playback);
   };
 
   mediaRecorder.start();
-
-  // Para automaticamente em 10s
-  setTimeout(() => mediaRecorder.stop(), 10000);
+  setTimeout(() => mediaRecorder.stop(), 10000); // 10s
 });
 
-// Função de zoom orgânico usando requestAnimationFrame
+// Zoom orgânico só no vídeo de playback
 function startOrganicZoom(video) {
   let scale = 1;
-  let direction = 1; // 1 = aumenta, -1 = diminui
-  const speed = 0.0008; // velocidade do zoom
+  let direction = 1; // 1 = aumentar, -1 = diminuir
+  const speed = 0.0008;
 
   function zoom() {
     scale += direction * speed;
@@ -123,12 +130,12 @@ function startOrganicZoom(video) {
     requestAnimationFrame(zoom);
   }
 
-  video.playbackRate = 0.5; // começa slow motion
+  video.playbackRate = 0.5;
   setInterval(() => {
-    video.playbackRate = video.playbackRate === 0.5 ? 2 : 0.5; // alterna velocidade
+    video.playbackRate = video.playbackRate === 0.5 ? 2 : 0.5;
   }, 4000);
 
-  zoom(); // inicia o zoom orgânico
+  zoom();
 }
 
 // Gerar QR Code
