@@ -3,57 +3,63 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gravação com Slow e Zoom</title>
+<title>Câmera com Slow, Zoom e QRCode</title>
 <style>
   body {
-    font-family: Arial, sans-serif;
-    background: #111;
+    background: black;
     color: white;
+    font-family: Arial, sans-serif;
     text-align: center;
     margin: 0;
     padding: 0;
   }
-  .container {
-    padding: 10px;
-    margin-top: 10px;
+
+  #container-gravacao, #container-visualizacao, #container-qrcode {
+    display: none;
+    padding: 20px;
   }
+
+  #container-gravacao {
+    display: block; /* container de gravação inicial sempre visível */
+  }
+
   video {
-    width: 90%;
-    max-width: 400px;
-    border: 3px solid gold;
+    width: 100%;
+    max-width: 500px;
+    border: 2px solid gold;
     border-radius: 10px;
+    /* Container fixo: sem zoom aqui */
   }
+
   button {
-    margin: 5px;
-    padding: 10px;
-    border: none;
+    padding: 10px 20px;
+    margin-top: 10px;
+    font-size: 16px;
     background: gold;
-    color: black;
-    font-weight: bold;
-    border-radius: 8px;
+    border: none;
+    border-radius: 5px;
     cursor: pointer;
-  }
-  #qrcode {
-    margin-top: 15px;
   }
 </style>
 </head>
 <body>
 
-<h2>🎥 Gravação Cinematográfica</h2>
-
-<div class="container" id="recordContainer">
-  <video id="preview" autoplay playsinline></video><br>
-  <button id="startBtn">🎬 Iniciar Gravação</button>
+<div id="container-gravacao">
+  <h2>🎥 Gravação</h2>
+  <video id="preview" autoplay playsinline></video>
+  <br>
+  <button id="startBtn">🎬 Gravar</button>
 </div>
 
-<div class="container" id="playbackContainer" style="display:none;">
-  <video id="playback" controls></video><br>
-  <button id="downloadBtn">⬇ Baixar Vídeo</button>
+<div id="container-visualizacao">
+  <h2>▶️ Visualização</h2>
+  <video id="playback" controls></video>
+  <br>
+  <button id="gerarQRBtn">📱 Gerar QR Code</button>
 </div>
 
-<div class="container" id="qrcodeContainer" style="display:none;">
-  <h3>📱 Compartilhar</h3>
+<div id="container-qrcode">
+  <h2>📱 QR Code</h2>
   <div id="qrcode"></div>
 </div>
 
@@ -61,65 +67,67 @@
 <script>
 let mediaRecorder;
 let recordedChunks = [];
+let stream;
 
-async function initCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: "environment",
-      zoom: 3 // Zoom inicial se suportado
-    },
-    audio: false
+// Inicia câmera sem áudio
+async function startCamera() {
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment" } // sem áudio
   });
   document.getElementById('preview').srcObject = stream;
+}
+
+startCamera();
+
+// Botão Gravar
+document.getElementById('startBtn').addEventListener('click', () => {
+  recordedChunks = [];
   mediaRecorder = new MediaRecorder(stream);
+
   mediaRecorder.ondataavailable = e => {
     if (e.data.size > 0) recordedChunks.push(e.data);
   };
+
   mediaRecorder.onstop = () => {
     const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    recordedChunks = [];
-    const videoURL = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
     const playback = document.getElementById('playback');
-    playback.src = videoURL;
+    playback.src = url;
 
-    // Efeito de slow + zoom só na reprodução
-    playback.onplay = () => {
-      let zoomIn = true;
-      setInterval(() => {
-        playback.playbackRate = playback.playbackRate === 0.5 ? 2 : 0.5;
-        playback.style.transform = zoomIn ? "scale(1.2)" : "scale(1)";
-        zoomIn = !zoomIn;
-      }, 2000);
-    };
+    // Aplicar zoom e slow motion apenas no playback
+    playback.style.transformOrigin = "center center";
+    playback.animate([
+      { transform: "scale(1)" },
+      { transform: "scale(1.5)" },
+      { transform: "scale(1)" }
+    ], { duration: 4000, iterations: Infinity });
 
-    document.getElementById('recordContainer').style.display = 'none';
-    document.getElementById('playbackContainer').style.display = 'block';
+    let slow = true;
+    setInterval(() => {
+      playback.playbackRate = slow ? 0.5 : 2;
+      slow = !slow;
+    }, 4000);
 
-    // QR Code
-    document.getElementById('qrcodeContainer').style.display = 'block';
-    document.getElementById('qrcode').innerHTML = '';
-    new QRCode(document.getElementById('qrcode'), videoURL);
+    document.getElementById('container-gravacao').style.display = 'none';
+    document.getElementById('container-visualizacao').style.display = 'block';
   };
-}
 
-document.getElementById('startBtn').addEventListener('click', () => {
-  recordedChunks = [];
   mediaRecorder.start();
-  setTimeout(() => {
-    mediaRecorder.stop();
-  }, 10000); // 10 segundos
+
+  // Para automaticamente em 10s
+  setTimeout(() => mediaRecorder.stop(), 10000);
 });
 
-document.getElementById('downloadBtn').addEventListener('click', () => {
+// Gerar QR Code
+document.getElementById('gerarQRBtn').addEventListener('click', () => {
   const blob = new Blob(recordedChunks, { type: 'video/webm' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'video.webm';
-  a.click();
-});
+  document.getElementById('qrcode').innerHTML = '';
+  new QRCode(document.getElementById('qrcode'), url);
 
-initCamera();
+  document.getElementById('container-visualizacao').style.display = 'none';
+  document.getElementById('container-qrcode').style.display = 'block';
+});
 </script>
 
 </body>
