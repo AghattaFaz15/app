@@ -2,65 +2,158 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>🎬 Gravação 360°</title>
+<title>🎬 Zoom + Slow Orgânico</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root { --azul:#0b132b; --dourado:#d4af37; }
-body { font-family:system-ui,sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px;}
+body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
+h2 { margin:20px 0; }
 button { padding:12px 22px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); margin:10px; box-shadow:0 6px 16px rgba(0,0,0,.25);}
-video { width:100%; max-height:55vh; margin:10px auto; border:3px solid var(--dourado); }
+video, canvas { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; transform-origin:center center; }
+#status { min-height:48px; margin:12px 0; font-weight:600; }
 #qrCode { width:200px; height:200px; margin:20px auto; display:grid; place-items:center; border:2px solid var(--dourado); border-radius:12px; }
-iframe { display:none; width:0; height:0; }
 </style>
 </head>
 <body>
 
-<h2>🎬 Gravação 360° Integrada</h2>
+<h2>🎬 Zoom + Slow Orgânico</h2>
 <button id="startBtn">▶️ Iniciar Gravação</button>
-<audio id="bgMusic" src="musica.mp3" preload="auto"></audio>
+<audio id="bgMusic" src="musica.mp3"></audio>
 
-<video id="previewVideo" controls></video>
+<video id="preview" autoplay muted playsinline></video>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<div id="status">⏳ Aguardando início...</div>
 <div id="qrCode"></div>
-
-<iframe id="zoomFrame" src="zoom.html"></iframe>
-<iframe id="slowFrame" src="slow.html"></iframe>
 
 <script>
 const startBtn = document.getElementById('startBtn');
-const zoomFrame = document.getElementById('zoomFrame');
-const slowFrame = document.getElementById('slowFrame');
-const previewVideo = document.getElementById('previewVideo');
+const preview = document.getElementById('preview');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const statusDiv = document.getElementById('status');
 const qrBox = document.getElementById('qrCode');
 const bgMusic = document.getElementById('bgMusic');
 
-let chunksReceived = [];
+const cloudName = 'dxobnhynf';
+const uploadPreset = 'plataforma_360';
+
+let mediaRecorder, chunks = [];
+let stream;
+let recording = false;
+let animFrame;
+
+// --- QR Code ---
 function makeQR(url){
   qrBox.innerHTML = '';
   new QRCode(qrBox, { text:url, width:200, height:200, correctLevel:QRCode.CorrectLevel.H });
 }
 
-// Recebe o vídeo dos iframes
-window.addEventListener('message', e=>{
-  if(e.data.videoBlob){
-    const blob = e.data.videoBlob;
-    const url = URL.createObjectURL(blob);
-    previewVideo.src = url;
-    previewVideo.play();
-    makeQR(url);
-  }
-});
+// --- Inicializa câmera ---
+async function initCamera(){
+  stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
+  preview.srcObject = stream;
+  await preview.play();
+  canvas.width = preview.videoWidth || 640;
+  canvas.height = preview.videoHeight || 480;
+}
 
-startBtn.onclick = ()=>{
-  chunksReceived = [];
-  previewVideo.src = '';
-  qrBox.innerHTML = '';
+// --- Zoom orgânico ---
+let zoomScale = 1;
+let zoomDirection = 0.008;
+function getZoom(){ 
+  zoomScale += zoomDirection; 
+  if(zoomScale > 2 || zoomScale < 1) zoomDirection *= -1;
+  return zoomScale;
+}
+
+// --- Slow orgânico ---
+let lastFrame;
+function getSlowFactor(){
+  return 0.2 + Math.random()*6.0; // até 6x
+}
+
+// --- Desenha no canvas ---
+function drawFrame(){
+  if(!recording) return;
+  const scale = getZoom();
+  const slowFactor = getSlowFactor();
+
+  if(!lastFrame || Math.random() < slowFactor){
+    lastFrame = preview;
+  }
+
+  ctx.save();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const w = canvas.width * scale;
+  const h = canvas.height * scale;
+  const dx = (canvas.width - w)/2;
+  const dy = (canvas.height - h)/2;
+  ctx.drawImage(lastFrame, dx, dy, w, h);
+  ctx.restore();
+
+  animFrame = setTimeout(drawFrame, 33);
+}
+
+// --- Inicia gravação ---
+function startRecording(){
+  chunks = [];
+  recording = true;
+  lastFrame = null;
+
   bgMusic.currentTime = 0;
   bgMusic.play();
-  zoomFrame.contentWindow.postMessage({ action:'start' }, '*');
-  slowFrame.contentWindow.postMessage({ action:'start' }, '*');
+
+  const canvasStream = canvas.captureStream(30);
+  mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
+  mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+  mediaRecorder.onstop = uploadVideo;
+  mediaRecorder.start();
+
+  drawFrame();
+  statusDiv.textContent = '🔴 Gravando...';
+  startBtn.disabled = true;
+
+  // grava 10s base, mas slow pode estender até ~20s
+  setTimeout(stopRecording, 10000);
+}
+
+// --- Para gravação ---
+function stopRecording(){
+  recording = false;
+  clearTimeout(animFrame);
+  mediaRecorder.stop();
+  bgMusic.pause();
+  statusDiv.textContent = '⏳ Enviando vídeo...';
+  startBtn.textContent = '▶️ Novo Vídeo';
+  startBtn.disabled = false;
+}
+
+// --- Upload para Cloudinary ---
+async function uploadVideo(){
+  const blob = new Blob(chunks,{type:'video/webm'});
+  const formData = new FormData();
+  formData.append('file',blob);
+  formData.append('upload_preset',uploadPreset);
+
+  try{
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, { method:'POST', body: formData });
+    const data = await res.json();
+    if(!res.ok || data.error) throw new Error(data?.error?.message || ('HTTP '+res.status));
+    const url = data.secure_url;
+    statusDiv.innerHTML = `✅ Vídeo enviado!<br><a href="${url}" target="_blank">Abrir vídeo</a>`;
+    makeQR(url);
+  }catch(err){
+    statusDiv.textContent = '❌ Erro ao enviar vídeo: '+err.message;
+  }
+}
+
+// --- Botão iniciar ---
+startBtn.onclick = async ()=>{
+  if(!stream) await initCamera();
+  startRecording();
 };
 </script>
-
 </body>
 </html>
