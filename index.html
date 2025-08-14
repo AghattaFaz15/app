@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>🎬 Zoom + Slow Orgânico</title>
+<title>🎬 Zoom + Slow Orgânico com Música e QR</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -10,39 +10,42 @@
 body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
 h2 { margin:20px 0; }
 button { padding:12px 22px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); margin:10px; box-shadow:0 6px 16px rgba(0,0,0,.25);}
-video, canvas { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; transform-origin:center center; }
+video { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; transform-origin:center center; }
 #status { min-height:48px; margin:12px 0; font-weight:600; }
 #qrCode { width:200px; height:200px; margin:20px auto; display:grid; place-items:center; border:2px solid var(--dourado); border-radius:12px; }
 </style>
 </head>
 <body>
 
-<h2>🎬 Zoom + Slow Orgânico</h2>
+<h2>🎬 Zoom + Slow/Speed Orgânico</h2>
 <button id="startBtn">▶️ Iniciar Gravação</button>
-<audio id="bgMusic" src="musica.mp3"></audio>
 
-<video id="preview" autoplay muted playsinline></video>
-<canvas id="canvas" style="display:none;"></canvas>
+<video id="mainVideo" autoplay muted playsinline></video>
+<canvas id="videoCanvas" style="display:none;"></canvas>
+<audio id="bgMusic" src="musica.mp3"></audio>
 
 <div id="status">⏳ Aguardando início...</div>
 <div id="qrCode"></div>
 
 <script>
 const startBtn = document.getElementById('startBtn');
-const preview = document.getElementById('preview');
-const canvas = document.getElementById('canvas');
+const mainVideo = document.getElementById('mainVideo');
+const canvas = document.getElementById('videoCanvas');
 const ctx = canvas.getContext('2d');
 const statusDiv = document.getElementById('status');
 const qrBox = document.getElementById('qrCode');
-const bgMusic = document.getElementById('bgMusic');
+const music = document.getElementById('bgMusic');
 
 const cloudName = 'dxobnhynf';
 const uploadPreset = 'plataforma_360';
 
 let mediaRecorder, chunks = [];
-let stream;
-let recording = false;
-let animFrame;
+let stream, recording = false;
+let zoomScale = 1, zoomDirection = 0.008;
+let animFrame, lastFrame;
+let recordingStartTime;
+const baseDuration = 10000; // 10s base
+const slowMultiplier = 2.0; // pode chegar até ~20s
 
 // --- QR Code ---
 function makeQR(url){
@@ -53,35 +56,33 @@ function makeQR(url){
 // --- Inicializa câmera ---
 async function initCamera(){
   stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
-  preview.srcObject = stream;
-  await preview.play();
-  canvas.width = preview.videoWidth || 640;
-  canvas.height = preview.videoHeight || 480;
+  mainVideo.srcObject = stream;
+  await mainVideo.play();
+  canvas.width = mainVideo.videoWidth || 640;
+  canvas.height = mainVideo.videoHeight || 480;
 }
 
 // --- Zoom orgânico ---
-let zoomScale = 1;
-let zoomDirection = 0.008;
 function getZoom(){ 
   zoomScale += zoomDirection; 
   if(zoomScale > 2 || zoomScale < 1) zoomDirection *= -1;
   return zoomScale;
 }
 
-// --- Slow orgânico ---
-let lastFrame;
+// --- Slow/Speed perceptível ---
 function getSlowFactor(){
-  return 0.2 + Math.random()*6.0; // até 6x
+  return 0.3 + Math.random()*5.7; // entre 0.3x e 6.0x
 }
 
-// --- Desenha no canvas ---
+// --- Desenha no canvas com slow orgânico ---
 function drawFrame(){
   if(!recording) return;
   const scale = getZoom();
   const slowFactor = getSlowFactor();
 
+  // Duplica frame anterior para lentidão
   if(!lastFrame || Math.random() < slowFactor){
-    lastFrame = preview;
+    lastFrame = mainVideo;
   }
 
   ctx.save();
@@ -93,17 +94,18 @@ function drawFrame(){
   ctx.drawImage(lastFrame, dx, dy, w, h);
   ctx.restore();
 
-  animFrame = setTimeout(drawFrame, 33);
+  // próximo frame ajustando slowFactor
+  animFrame = setTimeout(drawFrame, 33 / slowFactor);
 }
 
 // --- Inicia gravação ---
 function startRecording(){
   chunks = [];
   recording = true;
-  lastFrame = null;
+  recordingStartTime = Date.now();
 
-  bgMusic.currentTime = 0;
-  bgMusic.play();
+  music.currentTime = 0;
+  music.play();
 
   const canvasStream = canvas.captureStream(30);
   mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
@@ -115,8 +117,8 @@ function startRecording(){
   statusDiv.textContent = '🔴 Gravando...';
   startBtn.disabled = true;
 
-  // grava 10s base, mas slow pode estender até ~20s
-  setTimeout(stopRecording, 10000);
+  // grava 10s base, mas slow pode prolongar
+  setTimeout(stopRecording, baseDuration*slowMultiplier);
 }
 
 // --- Para gravação ---
@@ -124,7 +126,7 @@ function stopRecording(){
   recording = false;
   clearTimeout(animFrame);
   mediaRecorder.stop();
-  bgMusic.pause();
+  music.pause();
   statusDiv.textContent = '⏳ Enviando vídeo...';
   startBtn.textContent = '▶️ Novo Vídeo';
   startBtn.disabled = false;
@@ -149,7 +151,7 @@ async function uploadVideo(){
   }
 }
 
-// --- Botão iniciar ---
+// --- Botão iniciar/reiniciar ---
 startBtn.onclick = async ()=>{
   if(!stream) await initCamera();
   startRecording();
