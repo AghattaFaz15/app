@@ -4,54 +4,31 @@
 <meta charset="UTF-8">
 <title>🎬 Zoom + Slow/Speed Orgânico</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root { --azul:#0b132b; --dourado:#d4af37; }
 body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
 h2 { margin:20px 0; }
-button { padding:12px 22px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); margin:10px; box-shadow:0 6px 16px rgba(0,0,0,.25);}
 video { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; transform-origin:center center; }
-#status { min-height:48px; margin:12px 0; font-weight:600; }
-#qrCode { width:200px; height:200px; margin:20px auto; display:grid; place-items:center; border:2px solid var(--dourado); border-radius:12px; }
+canvas { display:none; }
 </style>
 </head>
 <body>
 
 <h2>🎬 Zoom + Slow/Speed Orgânico</h2>
-<button id="startBtn">▶️ Iniciar Gravação</button>
 
 <video id="mainVideo" autoplay muted playsinline></video>
-<video id="previewVideo" controls style="display:none; margin-top:15px;"></video>
-<canvas id="videoCanvas" style="display:none;"></canvas>
-<audio id="bgMusic" src="musica.mp3"></audio>
-
-<div id="status">⏳ Aguardando início...</div>
-<div id="qrCode"></div>
+<canvas id="videoCanvas"></canvas>
 
 <script>
-const startBtn = document.getElementById('startBtn');
 const mainVideo = document.getElementById('mainVideo');
-const previewVideo = document.getElementById('previewVideo');
 const canvas = document.getElementById('videoCanvas');
 const ctx = canvas.getContext('2d');
-const statusDiv = document.getElementById('status');
-const qrBox = document.getElementById('qrCode');
-const bgMusic = document.getElementById('bgMusic');
-
-const cloudName = 'dxobnhynf';
-const uploadPreset = 'plataforma_360';
 
 let mediaRecorder, chunks = [];
 let stream;
-let animFrame;
 let recording = false;
-let startTime;
-
-// --- QR Code ---
-function makeQR(url){
-  qrBox.innerHTML = '';
-  new QRCode(qrBox, { text:url, width:200, height:200, correctLevel:QRCode.CorrectLevel.H });
-}
+let animFrame;
+const totalDuration = 20000; // 20 segundos
 
 // --- Inicializa câmera ---
 async function initCamera(){
@@ -71,56 +48,45 @@ function getZoom(){
   return zoomScale;
 }
 
-// --- Slow/Speed real ---
-function getSpeedFactor(timeElapsed, totalTime){
-  const t = timeElapsed / totalTime;
+// --- Slow/Speed orgânico ---
+function getSpeedFactor(timeElapsed){
+  const t = timeElapsed / totalDuration;
   return 0.3 + 2.7 * (0.5 + 0.5*Math.sin(t * Math.PI * 4)); 
 }
 
 // --- Desenha no canvas ---
-function drawFrame(){
+function drawFrame(startTime){
   if(!recording) return;
+  const elapsed = Date.now() - startTime;
+  const speedFactor = getSpeedFactor(elapsed);
 
-  const elapsed = (Date.now() - startTime)/1000;
-  const totalDuration = 20; 
-  const speedFactor = getSpeedFactor(elapsed, totalDuration);
   const scale = getZoom();
-
   ctx.save();
   ctx.clearRect(0,0,canvas.width,canvas.height);
-
   const w = canvas.width * scale;
   const h = canvas.height * scale;
   const dx = (canvas.width - w)/2;
   const dy = (canvas.height - h)/2;
-
   ctx.drawImage(mainVideo, dx, dy, w, h);
   ctx.restore();
 
-  animFrame = setTimeout(()=>requestAnimationFrame(drawFrame), 33 / speedFactor);
+  animFrame = setTimeout(()=>requestAnimationFrame(()=>drawFrame(startTime)), 33 / speedFactor);
 }
 
 // --- Inicia gravação ---
 function startRecording(){
   chunks = [];
   recording = true;
-  startTime = Date.now();
-  previewVideo.style.display = 'none';
-  qrBox.innerHTML = '';
-  bgMusic.currentTime = 0;
-  bgMusic.play();
+  const startTime = Date.now();
 
   const canvasStream = canvas.captureStream(30);
   mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
   mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
-  mediaRecorder.onstop = uploadVideo;
   mediaRecorder.start();
 
-  drawFrame();
-  statusDiv.textContent = '🔴 Gravando...';
-  startBtn.disabled = true;
+  drawFrame(startTime);
 
-  setTimeout(stopRecording, 20000);
+  setTimeout(stopRecording, totalDuration);
 }
 
 // --- Para gravação ---
@@ -128,42 +94,16 @@ function stopRecording(){
   recording = false;
   clearTimeout(animFrame);
   mediaRecorder.stop();
-  bgMusic.pause();
-  statusDiv.textContent = '⏳ Processando vídeo...';
-  startBtn.textContent = '▶️ Novo Vídeo';
-  startBtn.disabled = false;
+
+  mediaRecorder.onstop = ()=>{
+    const blob = new Blob(chunks,{type:'video/webm'});
+    // envia para o index via postMessage
+    window.parent.postMessage({ videoBlob: blob }, '*');
+  };
 }
 
-// --- Upload ---
-async function uploadVideo(){
-  const blob = new Blob(chunks,{type:'video/webm'});
-  const url = URL.createObjectURL(blob);
-
-  previewVideo.src = url;
-  previewVideo.style.display = 'block';
-  previewVideo.play();
-
-  const formData = new FormData();
-  formData.append('file',blob);
-  formData.append('upload_preset',uploadPreset);
-
-  try{
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, { method:'POST', body: formData });
-    const data = await res.json();
-    if(!res.ok || data.error) throw new Error(data?.error?.message || ('HTTP '+res.status));
-    const cloudUrl = data.secure_url;
-    statusDiv.innerHTML = `✅ Vídeo enviado!<br><a href="${cloudUrl}" target="_blank">Abrir vídeo</a>`;
-    makeQR(cloudUrl);
-  }catch(err){
-    statusDiv.textContent = '❌ Erro ao enviar vídeo: '+err.message;
-  }
-}
-
-// --- Botão iniciar/reiniciar ---
-startBtn.onclick = async ()=>{
-  if(!stream) await initCamera();
-  startRecording();
-};
+// --- Início ---
+initCamera();
 </script>
 </body>
 </html>
