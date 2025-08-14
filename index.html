@@ -3,143 +3,57 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vídeo com Zoom e Slow/Fast</title>
+<title>Gravação</title>
 <style>
-body {
-  background: black;
-  color: white;
-  font-family: Arial, sans-serif;
-  text-align: center;
-  margin: 0;
-  padding: 0;
-}
-#container-gravacao, #container-visualizacao, #container-qrcode {
-  display: none;
-  padding: 20px;
-}
-#container-gravacao { display: block; }
-.video-wrapper {
-  width: 100%;
-  max-width: 500px;
-  margin: 0 auto;
-  overflow: hidden;
-  border: 2px solid gold;
-  border-radius: 10px;
-}
-video {
-  width: 100%;
-  display: block;
-  transform-origin: center center;
-}
-button {
-  padding: 10px 20px;
-  margin-top: 10px;
-  font-size: 16px;
-  background: gold;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
+body { background:black; color:white; font-family:Arial; text-align:center; margin:0; padding:0; }
+.video-wrapper { width:100%; max-width:500px; margin:0 auto; overflow:hidden; border:2px solid gold; border-radius:10px; }
+video { width:100%; display:block; transform-origin:center center; }
+button { padding:10px 20px; margin-top:10px; font-size:16px; background:gold; border:none; border-radius:5px; cursor:pointer; }
 </style>
 </head>
 <body>
 
-<div id="container-gravacao">
-  <h2>🎥 Gravação</h2>
-  <div class="video-wrapper">
-    <video id="preview" autoplay playsinline></video>
-  </div>
-  <br>
-  <button id="startBtn">🎬 Gravar</button>
+<h2>🎥 Gravação</h2>
+<div class="video-wrapper">
+  <video id="preview" autoplay playsinline></video>
 </div>
-
-<div id="container-visualizacao">
-  <h2>▶️ Visualização</h2>
-  <div class="video-wrapper">
-    <video id="playback" controls></video>
-  </div>
-  <br>
-  <button id="gerarQRBtn">📱 Gerar QR Code</button>
-</div>
-
-<div id="container-qrcode">
-  <h2>📱 QR Code</h2>
-  <div id="qrcode"></div>
-</div>
+<br>
+<button id="startBtn">🎬 Gravar</button>
+<br><br>
+<div id="qrcode"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
-let mediaRecorder;
-let recordedChunks = [];
-let stream;
+let stream, recordedChunks=[], mediaRecorder;
 
-// Inicia câmera sem áudio
-async function startCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "environment" }
-  });
+async function startCamera(){
+  stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
   document.getElementById('preview').srcObject = stream;
 }
 startCamera();
 
-// Gravação
-document.getElementById('startBtn').addEventListener('click', () => {
-  recordedChunks = [];
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  recordedChunks=[];
   mediaRecorder = new MediaRecorder(stream);
-  mediaRecorder.ondataavailable = e => {
-    if(e.data.size > 0) recordedChunks.push(e.data);
-  };
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+  mediaRecorder.ondataavailable = e=>{ if(e.data.size>0) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = ()=>{
+    const blob = new Blob(recordedChunks,{type:'video/webm'});
     const url = URL.createObjectURL(blob);
-    const playback = document.getElementById('playback');
-    playback.src = url;
 
-    document.getElementById('container-gravacao').style.display = 'none';
-    document.getElementById('container-visualizacao').style.display = 'block';
-
-    // Inicia zoom orgânico + alternância de velocidade
-    startZoomAndSpeed(playback);
+    // Gerar QR Code para o playback.html com o blob como parâmetro
+    // Convertendo blob para base64 para passar na URL
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(',')[1];
+      const qrUrl = `playback.html?video=${encodeURIComponent(base64)}`;
+      document.getElementById('qrcode').innerHTML='';
+      new QRCode(document.getElementById('qrcode'), qrUrl);
+    };
+    reader.readAsDataURL(blob);
   };
-
   mediaRecorder.start();
-  setTimeout(() => mediaRecorder.stop(), 10000); // grava 10s
-});
-
-// Zoom orgânico e alternância de velocidade
-function startZoomAndSpeed(video) {
-  let scale = 1;
-  let direction = 1;
-  const speed = 0.0005; // zoom suave
-
-  // Alterna velocidade: lento (0.5) -> rápido (2) -> lento...
-  video.playbackRate = 0.5; // inicia lento
-  setInterval(() => {
-    video.playbackRate = video.playbackRate === 0.5 ? 2 : 0.5;
-  }, 4000);
-
-  // Zoom orgânico contínuo
-  function zoom() {
-    scale += direction * speed;
-    if(scale > 1.2) direction = -1;
-    if(scale < 1) direction = 1;
-    video.style.transform = `scale(${scale})`;
-    requestAnimationFrame(zoom);
-  }
-  zoom();
-}
-
-// QR Code
-document.getElementById('gerarQRBtn').addEventListener('click', () => {
-  const blob = new Blob(recordedChunks, { type: 'video/webm' });
-  const url = URL.createObjectURL(blob);
-  document.getElementById('qrcode').innerHTML = '';
-  new QRCode(document.getElementById('qrcode'), url);
-
-  document.getElementById('container-visualizacao').style.display = 'none';
-  document.getElementById('container-qrcode').style.display = 'block';
+  setTimeout(()=>mediaRecorder.stop(),10000); // grava 10s
 });
 </script>
-
 </body>
 </html>
