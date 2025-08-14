@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Zoom + Slow Orgânico</title>
+<title>Zoom + Slow/Speed Orgânico</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -17,7 +17,7 @@ video { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--do
 </head>
 <body>
 
-<h2>🎬 Zoom + Slow Motion Orgânico</h2>
+<h2>🎬 Zoom + Slow/Speed Orgânico</h2>
 <button id="startBtn">▶️ Iniciar Gravação</button>
 
 <video id="mainVideo" autoplay muted playsinline></video>
@@ -52,23 +52,24 @@ function makeQR(url){
 async function initCamera(){
   stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
   mainVideo.srcObject = stream;
-  mainVideo.play();
+  await mainVideo.play();
   canvas.width = mainVideo.videoWidth || 640;
   canvas.height = mainVideo.videoHeight || 480;
 }
 
-// --- Zoom orgânico ---
+// --- Zoom orgânico mais rápido/profundo ---
 let zoomScale = 1;
-let zoomDirection = 0.004;
+let zoomDirection = 0.008; // dobramos a velocidade do zoom
 function getZoom(){ 
   zoomScale += zoomDirection; 
-  if(zoomScale>1.5 || zoomScale<1) zoomDirection*=-1;
+  if(zoomScale > 2 || zoomScale < 1) zoomDirection *= -1; // zoom mais profundo
   return zoomScale;
 }
 
-// --- Slow orgânico ---
-function getSlowFactor(){
-  return 0.1 + Math.random()*2.0;
+// --- Slow/Speed orgânico mais extremo ---
+function getSpeedFactor(){
+  // de 0.3x (bem lento) até 3x (bem rápido)
+  return 0.3 + Math.random() * 2.7;
 }
 
 // --- Desenha no canvas ---
@@ -76,7 +77,7 @@ function drawFrame(){
   if(!recording) return;
 
   const scale = getZoom();
-  const slowFactor = getSlowFactor();
+  const speedFactor = getSpeedFactor();
 
   ctx.save();
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -89,7 +90,8 @@ function drawFrame(){
   ctx.drawImage(mainVideo, dx, dy, w, h);
   ctx.restore();
 
-  animFrame = setTimeout(()=>requestAnimationFrame(drawFrame), 33 / slowFactor);
+  // ajusta tempo do próximo frame conforme fator de velocidade
+  animFrame = setTimeout(()=>requestAnimationFrame(drawFrame), (33 / speedFactor));
 }
 
 // --- Inicia gravação ---
@@ -107,8 +109,8 @@ function startRecording(){
   statusDiv.textContent = '🔴 Gravando...';
   startBtn.disabled = true;
 
-  // grava por 12 segundos
-  setTimeout(stopRecording,12000);
+  // grava por 20 segundos
+  setTimeout(stopRecording, 20000);
 }
 
 // --- Para gravação ---
