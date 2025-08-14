@@ -3,46 +3,52 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Playback Zoom</title>
+<title>Gravação</title>
 <style>
 body { background:black; color:white; font-family:Arial; text-align:center; margin:0; padding:0; }
-.video-wrapper { width:100%; max-width:500px; margin:50px auto; overflow:hidden; border:2px solid gold; border-radius:10px; }
+.video-wrapper { width:100%; max-width:500px; margin:0 auto; overflow:hidden; border:2px solid gold; border-radius:10px; }
 video { width:100%; display:block; transform-origin:center center; }
+button { padding:10px 20px; margin-top:10px; font-size:16px; background:gold; border:none; border-radius:5px; cursor:pointer; }
 </style>
 </head>
 <body>
 
-<h2>▶️ Playback com Zoom</h2>
+<h2>🎥 Gravação</h2>
 <div class="video-wrapper">
-  <video id="playback" controls autoplay loop></video>
+  <video id="preview" autoplay playsinline></video>
 </div>
+<br>
+<button id="startBtn">🎬 Gravar 10s</button>
+<button id="playbackBtn" disabled>▶️ Ver Playback</button>
 
 <script>
-// pega URL do vídeo da query string
-const params = new URLSearchParams(window.location.search);
-const videoUrl = params.get('videoUrl');
-if(videoUrl){
-  const video = document.getElementById('playback');
-  video.src = videoUrl;
-  video.playbackRate = 0.5; // 10s -> 20s
+let stream, mediaRecorder, recordedChunks=[];
 
-  // alterna velocidade
-  setInterval(()=>{
-    video.playbackRate = video.playbackRate===0.5 ? 2 : 0.5;
-  },4000);
-
-  // zoom orgânico
-  let scale=1, direction=1;
-  const speed=0.0005;
-  function zoom(){
-    scale+=direction*speed;
-    if(scale>1.2) direction=-1;
-    if(scale<1) direction=1;
-    video.style.transform=`scale(${scale})`;
-    requestAnimationFrame(zoom);
-  }
-  zoom();
+async function startCamera(){
+  stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+  document.getElementById('preview').srcObject = stream;
 }
+startCamera();
+
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  recordedChunks=[];
+  mediaRecorder = new MediaRecorder(stream);
+  mediaRecorder.ondataavailable = e=>{ if(e.data.size>0) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = ()=>{
+    // habilita botão para playback
+    document.getElementById('playbackBtn').disabled=false;
+  };
+  mediaRecorder.start();
+  setTimeout(()=>mediaRecorder.stop(),10000); // grava 10s
+});
+
+// Botão playback abre novo HTML com o Blob
+document.getElementById('playbackBtn').addEventListener('click', ()=>{
+  const blob = new Blob(recordedChunks,{type:'video/webm'});
+  const url = URL.createObjectURL(blob);
+  // passa URL via query string para playback.html
+  window.open(`playback.html?videoUrl=${encodeURIComponent(url)}`, '_blank');
+});
 </script>
 
 </body>
