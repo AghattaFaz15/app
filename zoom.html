@@ -15,6 +15,7 @@ canvas { display:none; }
 <body>
 
 <h2>🎬 Zoom + Slow/Speed Orgânico</h2>
+
 <video id="mainVideo" autoplay muted playsinline></video>
 <canvas id="videoCanvas"></canvas>
 
@@ -26,7 +27,6 @@ const ctx = canvas.getContext('2d');
 let mediaRecorder, chunks = [];
 let stream;
 let recording = false;
-let lastFrameTime = 0;
 let animFrame;
 const captureDuration = 10000; // 10 segundos "reais"
 const zoomMax = 2;
@@ -50,23 +50,24 @@ function getZoom(){
   return zoomScale;
 }
 
-// --- Slow/Speed orgânico ---
+// --- Slow/Speed orgânico perceptível ---
+let lastFrameTime = 0;
+let lastFrameImage = null;
 function getSlowMultiplier(){
-  // alterna entre 0.3x (lentidão) e 2.5x (aceleração)
-  return 0.3 + Math.random()*2.2;
+  // alterna dramaticamente entre 0.1x (super lento) e 3x (super rápido)
+  return 0.1 + Math.random()*2.9;
 }
 
 // --- Desenha no canvas com slow/fast ---
-function drawFrame(timestamp){
+function drawFrame(){
   if(!recording) return;
 
   const now = Date.now();
-  const delta = now - lastFrameTime;
-  let slowMult = getSlowMultiplier();
-
-  // controla o tempo "real" de captura (~10s)
-  if(delta * slowMult >= 33){
+  const slowMult = getSlowMultiplier();
+  
+  if(!lastFrameTime || now - lastFrameTime >= (33 / slowMult)){
     lastFrameTime = now;
+
     const scale = getZoom();
     ctx.save();
     ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -76,6 +77,11 @@ function drawFrame(timestamp){
     const dy = (canvas.height - h)/2;
     ctx.drawImage(mainVideo, dx, dy, w, h);
     ctx.restore();
+
+    lastFrameImage = ctx.getImageData(0,0,canvas.width,canvas.height);
+  } else if(lastFrameImage){
+    // mantém frame anterior para efeito lento
+    ctx.putImageData(lastFrameImage, 0, 0);
   }
 
   animFrame = requestAnimationFrame(drawFrame);
@@ -85,7 +91,7 @@ function drawFrame(timestamp){
 function startRecording(){
   chunks = [];
   recording = true;
-  lastFrameTime = Date.now();
+  lastFrameTime = 0;
 
   const canvasStream = canvas.captureStream(30);
   mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
