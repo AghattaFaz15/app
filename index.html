@@ -2,30 +2,144 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>🎬 Hub Gravação 360°</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zoom + Slow + Música + QRCode</title>
 <style>
-:root { --azul:#0b132b; --dourado:#d4af37; }
-body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
-h2 { margin:20px 0; }
-button { padding:15px 25px; margin:10px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); box-shadow:0 6px 16px rgba(0,0,0,.25);}
+    body {
+        background: #000;
+        color: white;
+        text-align: center;
+        font-family: Arial, sans-serif;
+    }
+    video, canvas {
+        display: block;
+        margin: 10px auto;
+        max-width: 90%;
+    }
+    button {
+        padding: 10px 20px;
+        margin: 10px;
+        font-size: 18px;
+        cursor: pointer;
+        border: none;
+        border-radius: 5px;
+        background: #1e90ff;
+        color: white;
+    }
+    #qrcode {
+        margin-top: 20px;
+    }
 </style>
 </head>
 <body>
-<h2>🎬 Hub de Gravação 360°</h2>
-<p>Use os botões abaixo para abrir cada efeito e controle de vídeo:</p>
+
+<h1>Gravação Criativa</h1>
+<video id="preview" autoplay muted></video>
+<canvas id="canvas" style="display:none;"></canvas>
+<audio id="musica" src="musica.mp3"></audio>
 
 <div>
-  <button onclick="openPage('zoom.html')">Zoom Progressivo</button>
-  <button onclick="openPage('slow.html')">Slow Motion</button>
-  <button onclick="openPage('music.html')">Música de Fundo</button>
-  <button onclick="openPage('qrcode.html')">QR Code do Vídeo</button>
+    <button id="startBtn">🎬 Iniciar Gravação</button>
+    <button id="restartBtn" style="display:none;">🔄 Novo Vídeo</button>
 </div>
 
+<div id="qrcode"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
-function openPage(url){
-  window.open(url,'_blank');
+// Seletores
+const startBtn = document.getElementById("startBtn");
+const restartBtn = document.getElementById("restartBtn");
+const video = document.getElementById("preview");
+const canvas = document.getElementById("canvas");
+const musica = document.getElementById("musica");
+const qrDiv = document.getElementById("qrcode");
+
+let mediaRecorder;
+let recordedChunks = [];
+
+// Iniciar gravação
+startBtn.onclick = async () => {
+    startBtn.style.display = "none";
+    restartBtn.style.display = "none";
+    qrDiv.innerHTML = "";
+
+    // Captura de vídeo
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    video.srcObject = stream;
+
+    // Música
+    musica.currentTime = 0;
+    musica.play();
+
+    // Canvas para efeito
+    const ctx = canvas.getContext("2d");
+    const [track] = stream.getVideoTracks();
+    const settings = track.getSettings();
+    canvas.width = settings.width;
+    canvas.height = settings.height;
+
+    let zoom = 1;
+    let zoomSpeed = 0.005;
+
+    const processVideo = () => {
+        ctx.save();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(zoom, zoom);
+        ctx.drawImage(video, -canvas.width / 2, -canvas.height / 2, canvas.width, canvas.height);
+        ctx.restore();
+        zoom += zoomSpeed;
+        requestAnimationFrame(processVideo);
+    };
+    processVideo();
+
+    // Gravação do canvas com áudio
+    const mixedStream = new MediaStream();
+    canvas.captureStream(30).getTracks().forEach(t => mixedStream.addTrack(t));
+    stream.getAudioTracks().forEach(t => mixedStream.addTrack(t));
+
+    mediaRecorder = new MediaRecorder(mixedStream, { mimeType: "video/webm" });
+    mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
+    mediaRecorder.onstop = saveVideo;
+    mediaRecorder.start();
+
+    // Para em 10 segundos (slow + zoom)
+    setTimeout(() => {
+        mediaRecorder.stop();
+        musica.pause();
+        stream.getTracks().forEach(t => t.stop());
+    }, 10000);
+};
+
+// Salvar vídeo e gerar QRCode
+function saveVideo() {
+    const blob = new Blob(recordedChunks, { type: "video/webm" });
+    recordedChunks = [];
+    const url = URL.createObjectURL(blob);
+
+    // Mostra link do vídeo
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "video_zoom_slow.webm";
+    link.textContent = "📥 Baixar Vídeo";
+    qrDiv.appendChild(link);
+
+    // QR Code
+    new QRCode(qrDiv, {
+        text: url,
+        width: 200,
+        height: 200
+    });
+
+    restartBtn.style.display = "inline-block";
 }
+
+// Reiniciar
+restartBtn.onclick = () => {
+    startBtn.style.display = "inline-block";
+    restartBtn.style.display = "none";
+    qrDiv.innerHTML = "";
+};
 </script>
 </body>
 </html>
