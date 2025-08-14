@@ -34,19 +34,19 @@ document.getElementById('startBtn').addEventListener('click', ()=>{
   recordedChunks=[];
   mediaRecorder = new MediaRecorder(stream);
   mediaRecorder.ondataavailable = e=>{ if(e.data.size>0) recordedChunks.push(e.data); };
-  mediaRecorder.onstop = ()=>{
-    // habilita botão para playback
-    document.getElementById('playbackBtn').disabled=false;
-  };
+  mediaRecorder.onstop = ()=>{ document.getElementById('playbackBtn').disabled=false; };
   mediaRecorder.start();
-  setTimeout(()=>mediaRecorder.stop(),10000); // grava 10s
+
+  // Garantir 10s exatas usando setTimeout
+  setTimeout(()=>{ 
+    if(mediaRecorder.state !== "inactive") mediaRecorder.stop(); 
+  }, 10000);
 });
 
 // Botão playback abre novo HTML com o Blob
 document.getElementById('playbackBtn').addEventListener('click', ()=>{
   const blob = new Blob(recordedChunks,{type:'video/webm'});
   const url = URL.createObjectURL(blob);
-  // passa URL via query string para playback.html
   window.open(`playback.html?videoUrl=${encodeURIComponent(url)}`, '_blank');
 });
 </script>
