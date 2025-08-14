@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>🎬 Zoom + Slow Orgânico com Música e QR</title>
+<title>Zoom + Slow + Música + QR Code</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -10,42 +10,32 @@
 body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
 h2 { margin:20px 0; }
 button { padding:12px 22px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); margin:10px; box-shadow:0 6px 16px rgba(0,0,0,.25);}
-video { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; transform-origin:center center; }
+video { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; }
 #status { min-height:48px; margin:12px 0; font-weight:600; }
 #qrCode { width:200px; height:200px; margin:20px auto; display:grid; place-items:center; border:2px solid var(--dourado); border-radius:12px; }
+iframe { display:none; }
 </style>
 </head>
 <body>
 
-<h2>🎬 Zoom + Slow/Speed Orgânico</h2>
+<h2>🎬 Zoom + Slow Motion Profissional</h2>
 <button id="startBtn">▶️ Iniciar Gravação</button>
 
-<video id="mainVideo" autoplay muted playsinline></video>
-<canvas id="videoCanvas" style="display:none;"></canvas>
-<audio id="bgMusic" src="musica.mp3"></audio>
-
+<video id="previewVideo" controls></video>
 <div id="status">⏳ Aguardando início...</div>
 <div id="qrCode"></div>
+<audio id="bgMusic" src="musica.mp3"></audio>
+
+<!-- iframe que vai carregar slow.html ou zoom.html -->
+<iframe id="workerFrame"></iframe>
 
 <script>
 const startBtn = document.getElementById('startBtn');
-const mainVideo = document.getElementById('mainVideo');
-const canvas = document.getElementById('videoCanvas');
-const ctx = canvas.getContext('2d');
+const previewVideo = document.getElementById('previewVideo');
 const statusDiv = document.getElementById('status');
 const qrBox = document.getElementById('qrCode');
 const music = document.getElementById('bgMusic');
-
-const cloudName = 'dxobnhynf';
-const uploadPreset = 'plataforma_360';
-
-let mediaRecorder, chunks = [];
-let stream, recording = false;
-let zoomScale = 1, zoomDirection = 0.008;
-let animFrame, lastFrame;
-let recordingStartTime;
-const baseDuration = 10000; // 10s base
-const slowMultiplier = 2.0; // pode chegar até ~20s
+const workerFrame = document.getElementById('workerFrame');
 
 // --- QR Code ---
 function makeQR(url){
@@ -53,108 +43,38 @@ function makeQR(url){
   new QRCode(qrBox, { text:url, width:200, height:200, correctLevel:QRCode.CorrectLevel.H });
 }
 
-// --- Inicializa câmera ---
-async function initCamera(){
-  stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
-  mainVideo.srcObject = stream;
-  await mainVideo.play();
-  canvas.width = mainVideo.videoWidth || 640;
-  canvas.height = mainVideo.videoHeight || 480;
-}
+// --- Recebe vídeo do slow.html/zoom.html ---
+window.addEventListener('message', async (e)=>{
+  if(!e.data?.videoBlob) return;
 
-// --- Zoom orgânico ---
-function getZoom(){ 
-  zoomScale += zoomDirection; 
-  if(zoomScale > 2 || zoomScale < 1) zoomDirection *= -1;
-  return zoomScale;
-}
+  const blob = e.data.videoBlob;
+  const url = URL.createObjectURL(blob);
 
-// --- Slow/Speed perceptível ---
-function getSlowFactor(){
-  return 0.3 + Math.random()*5.7; // entre 0.3x e 6.0x
-}
-
-// --- Desenha no canvas com slow orgânico ---
-function drawFrame(){
-  if(!recording) return;
-  const scale = getZoom();
-  const slowFactor = getSlowFactor();
-
-  // Duplica frame anterior para lentidão
-  if(!lastFrame || Math.random() < slowFactor){
-    lastFrame = mainVideo;
-  }
-
-  ctx.save();
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  const w = canvas.width * scale;
-  const h = canvas.height * scale;
-  const dx = (canvas.width - w)/2;
-  const dy = (canvas.height - h)/2;
-  ctx.drawImage(lastFrame, dx, dy, w, h);
-  ctx.restore();
-
-  // próximo frame ajustando slowFactor
-  animFrame = setTimeout(drawFrame, 33 / slowFactor);
-}
-
-// --- Inicia gravação ---
-function startRecording(){
-  chunks = [];
-  recording = true;
-  recordingStartTime = Date.now();
+  previewVideo.src = url;
+  previewVideo.play();
 
   music.currentTime = 0;
   music.play();
 
-  const canvasStream = canvas.captureStream(30);
-  mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
-  mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
-  mediaRecorder.onstop = uploadVideo;
-  mediaRecorder.start();
+  // gera QR Code
+  makeQR(url);
 
-  drawFrame();
-  statusDiv.textContent = '🔴 Gravando...';
+  statusDiv.textContent = '✅ Gravação pronta!';
+});
+
+// --- Botão iniciar ---
+startBtn.onclick = ()=>{
+  statusDiv.textContent = '⏳ Gravando...';
   startBtn.disabled = true;
 
-  // grava 10s base, mas slow pode prolongar
-  setTimeout(stopRecording, baseDuration*slowMultiplier);
-}
+  // você pode escolher slow.html ou zoom.html
+  workerFrame.src = 'slow.html'; // ou 'zoom.html'
 
-// --- Para gravação ---
-function stopRecording(){
-  recording = false;
-  clearTimeout(animFrame);
-  mediaRecorder.stop();
-  music.pause();
-  statusDiv.textContent = '⏳ Enviando vídeo...';
-  startBtn.textContent = '▶️ Novo Vídeo';
-  startBtn.disabled = false;
-}
-
-// --- Upload para Cloudinary ---
-async function uploadVideo(){
-  const blob = new Blob(chunks,{type:'video/webm'});
-  const formData = new FormData();
-  formData.append('file',blob);
-  formData.append('upload_preset',uploadPreset);
-
-  try{
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, { method:'POST', body: formData });
-    const data = await res.json();
-    if(!res.ok || data.error) throw new Error(data?.error?.message || ('HTTP '+res.status));
-    const url = data.secure_url;
-    statusDiv.innerHTML = `✅ Vídeo enviado!<br><a href="${url}" target="_blank">Abrir vídeo</a>`;
-    makeQR(url);
-  }catch(err){
-    statusDiv.textContent = '❌ Erro ao enviar vídeo: '+err.message;
-  }
-}
-
-// --- Botão iniciar/reiniciar ---
-startBtn.onclick = async ()=>{
-  if(!stream) await initCamera();
-  startRecording();
+  // habilita novo vídeo após 25s (tempo para slow + zoom)
+  setTimeout(()=>{
+    startBtn.disabled = false;
+    startBtn.textContent = '▶️ Novo Vídeo';
+  }, 25000);
 };
 </script>
 </body>
