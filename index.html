@@ -3,50 +3,43 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vídeo com Zoom Orgânico e Slow Motion</title>
+<title>Vídeo com Zoom e Slow/Fast</title>
 <style>
-  body {
-    background: black;
-    color: white;
-    font-family: Arial, sans-serif;
-    text-align: center;
-    margin: 0;
-    padding: 0;
-  }
-
-  #container-gravacao, #container-visualizacao, #container-qrcode {
-    display: none;
-    padding: 20px;
-  }
-
-  #container-gravacao {
-    display: block; /* visível inicialmente */
-  }
-
-  .video-wrapper {
-    width: 100%;
-    max-width: 500px;
-    margin: 0 auto;
-    overflow: hidden; 
-    border: 2px solid gold;
-    border-radius: 10px;
-  }
-
-  video {
-    width: 100%;
-    display: block;
-    transform-origin: center center;
-  }
-
-  button {
-    padding: 10px 20px;
-    margin-top: 10px;
-    font-size: 16px;
-    background: gold;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-  }
+body {
+  background: black;
+  color: white;
+  font-family: Arial, sans-serif;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+}
+#container-gravacao, #container-visualizacao, #container-qrcode {
+  display: none;
+  padding: 20px;
+}
+#container-gravacao { display: block; }
+.video-wrapper {
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 2px solid gold;
+  border-radius: 10px;
+}
+video {
+  width: 100%;
+  display: block;
+  transform-origin: center center;
+}
+button {
+  padding: 10px 20px;
+  margin-top: 10px;
+  font-size: 16px;
+  background: gold;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
 </style>
 </head>
 <body>
@@ -87,57 +80,56 @@ async function startCamera() {
   });
   document.getElementById('preview').srcObject = stream;
 }
-
 startCamera();
 
-// Botão Gravar
+// Gravação
 document.getElementById('startBtn').addEventListener('click', () => {
   recordedChunks = [];
   mediaRecorder = new MediaRecorder(stream);
-
   mediaRecorder.ondataavailable = e => {
-    if (e.data.size > 0) recordedChunks.push(e.data);
+    if(e.data.size > 0) recordedChunks.push(e.data);
   };
-
   mediaRecorder.onstop = () => {
     const blob = new Blob(recordedChunks, { type: 'video/webm' });
     const url = URL.createObjectURL(blob);
     const playback = document.getElementById('playback');
     playback.src = url;
 
-    // Mostra a visualização
     document.getElementById('container-gravacao').style.display = 'none';
     document.getElementById('container-visualizacao').style.display = 'block';
 
-    // Reproduz 2x mais devagar para estender 10s -> 20s
-    playback.playbackRate = 0.5;
-
-    // Zoom orgânico
-    startOrganicZoom(playback);
+    // Inicia zoom orgânico + alternância de velocidade
+    startZoomAndSpeed(playback);
   };
 
   mediaRecorder.start();
   setTimeout(() => mediaRecorder.stop(), 10000); // grava 10s
 });
 
-// Zoom orgânico usando requestAnimationFrame
-function startOrganicZoom(video) {
+// Zoom orgânico e alternância de velocidade
+function startZoomAndSpeed(video) {
   let scale = 1;
   let direction = 1;
-  const speed = 0.0005; // mais lento para parecer orgânico
+  const speed = 0.0005; // zoom suave
 
+  // Alterna velocidade: lento (0.5) -> rápido (2) -> lento...
+  video.playbackRate = 0.5; // inicia lento
+  setInterval(() => {
+    video.playbackRate = video.playbackRate === 0.5 ? 2 : 0.5;
+  }, 4000);
+
+  // Zoom orgânico contínuo
   function zoom() {
     scale += direction * speed;
-    if (scale > 1.2) direction = -1;
-    if (scale < 1) direction = 1;
+    if(scale > 1.2) direction = -1;
+    if(scale < 1) direction = 1;
     video.style.transform = `scale(${scale})`;
     requestAnimationFrame(zoom);
   }
-
   zoom();
 }
 
-// Gerar QR Code
+// QR Code
 document.getElementById('gerarQRBtn').addEventListener('click', () => {
   const blob = new Blob(recordedChunks, { type: 'video/webm' });
   const url = URL.createObjectURL(blob);
