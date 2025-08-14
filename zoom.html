@@ -1,124 +1,119 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<title>🎬 Zoom + Slow 6x</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-:root { --azul:#0b132b; --dourado:#d4af37; }
-body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
-h2 { margin:20px 0; }
-video { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; transform-origin:center center; }
-canvas { display:none; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zoom com Slow Motion</title>
+  <style>
+    body {
+      background: black;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: white;
+      font-family: sans-serif;
+    }
+    video {
+      max-width: 90vw;
+      border: 3px solid gold;
+      margin-top: 10px;
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      background: gold;
+      color: black;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:disabled {
+      background: gray;
+      cursor: not-allowed;
+    }
+  </style>
 </head>
 <body>
+  <h1>Zoom + Slow Motion</h1>
+  <video id="preview" autoplay playsinline></video>
+  <button id="startBtn">🎥 Gravar 10s com Zoom</button>
+  <video id="result" controls style="display:none;"></video>
+  
+  <!-- FFmpeg -->
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
+  
+  <script>
+    const preview = document.getElementById('preview');
+    const resultVideo = document.getElementById('result');
+    const startBtn = document.getElementById('startBtn');
 
-<h2>🎬 Zoom + Slow Motion 6x</h2>
+    let mediaRecorder;
+    let recordedChunks = [];
 
-<video id="mainVideo" autoplay muted playsinline></video>
-<canvas id="videoCanvas"></canvas>
+    async function startCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user",
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          zoom: true
+        },
+        audio: false // sem áudio
+      });
+      preview.srcObject = stream;
+      return stream;
+    }
 
-<script>
-const mainVideo = document.getElementById('mainVideo');
-const canvas = document.getElementById('videoCanvas');
-const ctx = canvas.getContext('2d');
+    startCamera();
 
-let mediaRecorder, chunks = [];
-let stream;
-let recording = false;
-let animFrame;
+    startBtn.addEventListener('click', async () => {
+      recordedChunks = [];
+      const stream = preview.srcObject;
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
 
-// --- Duração e Zoom ---
-const captureDuration = 10000; // 10 segundos reais
-const zoomMax = 2;
-const zoomMin = 1;
-let zoomScale = 1;
-let zoomDirection = 0.008;
+      mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) {
+          recordedChunks.push(e.data);
+        }
+      };
 
-// --- Inicializa câmera (som desligado) ---
-async function initCamera(){
-  stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
-  mainVideo.srcObject = stream;
-  await mainVideo.play();
-  canvas.width = mainVideo.videoWidth || 640;
-  canvas.height = mainVideo.videoHeight || 480;
-}
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
 
-// --- Zoom orgânico ---
-function getZoom(){ 
-  zoomScale += zoomDirection; 
-  if(zoomScale > zoomMax || zoomScale < zoomMin) zoomDirection *= -1;
-  return zoomScale;
-}
+        // FFmpeg para aplicar slow motion
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ log: true });
+        await ffmpeg.load();
 
-// --- Slow perceptível 6x ---
-let lastFrameTime = 0;
-let lastFrameImage = null;
-function getSlowFactor(){
-  return 6.0; // 6x slow
-}
+        ffmpeg.FS('writeFile', 'input.webm', await fetchFile(uint8Array));
 
-// --- Desenha no canvas com slow ---
-function drawFrame(){
-  if(!recording) return;
+        // -filter:v "setpts=6.0*PTS" aplica slow motion 6x
+        await ffmpeg.run('-i', 'input.webm', '-filter:v', 'setpts=6.0*PTS', 'output.webm');
 
-  const now = Date.now();
-  const slowFactor = getSlowFactor();
+        const data = ffmpeg.FS('readFile', 'output.webm');
+        const slowBlob = new Blob([data.buffer], { type: 'video/webm' });
+        const slowUrl = URL.createObjectURL(slowBlob);
 
-  if(!lastFrameTime || now - lastFrameTime >= (33 / slowFactor)){
-    lastFrameTime = now;
+        resultVideo.src = slowUrl;
+        resultVideo.style.display = 'block';
 
-    const scale = getZoom();
-    ctx.save();
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    const w = canvas.width * scale;
-    const h = canvas.height * scale;
-    const dx = (canvas.width - w)/2;
-    const dy = (canvas.height - h)/2;
-    ctx.drawImage(mainVideo, dx, dy, w, h);
-    ctx.restore();
+        const a = document.createElement('a');
+        a.href = slowUrl;
+        a.download = 'video_slowmotion.webm';
+        a.textContent = '⬇️ Baixar vídeo lento';
+        document.body.appendChild(a);
+      };
 
-    lastFrameImage = ctx.getImageData(0,0,canvas.width,canvas.height);
-  } else if(lastFrameImage){
-    ctx.putImageData(lastFrameImage, 0, 0);
-  }
+      mediaRecorder.start();
+      startBtn.disabled = true;
 
-  animFrame = requestAnimationFrame(drawFrame);
-}
-
-// --- Inicia gravação ---
-function startRecording(){
-  chunks = [];
-  recording = true;
-  lastFrameTime = 0;
-
-  const canvasStream = canvas.captureStream(30);
-  mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
-  mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
-  mediaRecorder.start();
-
-  drawFrame();
-
-  // grava 10s reais, slow prolonga vídeo
-  setTimeout(stopRecording, captureDuration);
-}
-
-// --- Para gravação ---
-function stopRecording(){
-  recording = false;
-  cancelAnimationFrame(animFrame);
-  mediaRecorder.stop();
-
-  mediaRecorder.onstop = ()=>{
-    const blob = new Blob(chunks,{type:'video/webm'});
-    // envia para o index para gerar QR Code
-    window.parent.postMessage({ videoBlob: blob }, '*');
-  };
-}
-
-// --- Início ---
-initCamera();
-</script>
+      setTimeout(() => {
+        mediaRecorder.stop();
+        startBtn.disabled = false;
+      }, 10000); // grava exatamente 10 segundos
+    });
+  </script>
 </body>
 </html>
