@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Playback Zoom</title>
+<style>
+body { background:black; color:white; font-family:Arial; text-align:center; margin:0; padding:0; }
+.video-wrapper { width:100%; max-width:500px; margin:0 auto; overflow:hidden; border:2px solid gold; border-radius:10px; margin-top:50px; }
+video { width:100%; display:block; transform-origin:center center; }
+</style>
+</head>
+<body>
+
+<h2>▶️ Playback com Zoom</h2>
+<div class="video-wrapper">
+  <video id="playback" controls autoplay></video>
+</div>
+
+<script>
+// Pega o vídeo da URL
+const params = new URLSearchParams(window.location.search);
+const base64Video = params.get('video');
+if(base64Video){
+  const video = document.getElementById('playback');
+  video.src = `data:video/webm;base64,${base64Video}`;
+  video.playbackRate = 0.5; // 10s → 20s
+  video.loop = true;
+
+  // Zoom orgânico
+  let scale=1, direction=1;
+  const speed = 0.0005;
+  function zoom(){
+    scale += direction*speed;
+    if(scale>1.2) direction=-1;
+    if(scale<1) direction=1;
+    video.style.transform=`scale(${scale})`;
+    requestAnimationFrame(zoom);
+  }
+  zoom();
+
+  // Alterna velocidade: lento (0.5) → rápido (2)
+  setInterval(()=>{
+    video.playbackRate = video.playbackRate===0.5 ? 2 : 0.5;
+  },4000);
+}
+</script>
+</body>
+</html>
