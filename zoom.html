@@ -27,9 +27,10 @@ const ctx = canvas.getContext('2d');
 let mediaRecorder, chunks = [];
 let stream;
 let recording = false;
-let animFrame;
+let frameTimes = [];
 const totalDuration = 20000; // 20 segundos
-let recordingStartTime;
+const targetFPS = 30;
+let frameIndex = 0;
 
 // --- Inicializa câmera ---
 async function initCamera(){
@@ -49,23 +50,18 @@ function getZoom(){
   return zoomScale;
 }
 
-// --- Slow/Speed orgânico perceptível ---
-let lastFrame;
-function getSlowFactor(){
-  // alterna entre 0.3x e 2.5x
-  return 0.3 + Math.random()*2.2;
+// --- Slow/Speed orgânico ---
+function getFrameMultiplier(){
+  // alterna entre 0.3x (slow) e 3x (fast)
+  return 0.3 + Math.random()*2.7;
 }
 
-// --- Desenha no canvas com slow orgânico ---
+// --- Desenha no canvas com slow/fast perceptível ---
 function drawFrame(){
   if(!recording) return;
-  const scale = getZoom();
 
-  // decide se duplica o frame (lentidão)
-  const slowFactor = getSlowFactor();
-  if(!lastFrame || Math.random() < slowFactor){
-    lastFrame = mainVideo;
-  }
+  const scale = getZoom();
+  const multiplier = getFrameMultiplier();
 
   ctx.save();
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -73,20 +69,22 @@ function drawFrame(){
   const h = canvas.height * scale;
   const dx = (canvas.width - w)/2;
   const dy = (canvas.height - h)/2;
-  ctx.drawImage(lastFrame, dx, dy, w, h);
+  ctx.drawImage(mainVideo, dx, dy, w, h);
   ctx.restore();
 
-  // próximo frame
-  animFrame = setTimeout(drawFrame, 33);
+  // duplicar frame para slowmotion
+  const nextDelay = 1000 / (targetFPS * multiplier);
+  frameIndex++;
+  animFrame = setTimeout(drawFrame, nextDelay);
 }
 
 // --- Inicia gravação ---
 function startRecording(){
   chunks = [];
   recording = true;
-  recordingStartTime = Date.now();
+  frameIndex = 0;
 
-  const canvasStream = canvas.captureStream(30);
+  const canvasStream = canvas.captureStream(targetFPS);
   mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
   mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
   mediaRecorder.start();
@@ -103,7 +101,7 @@ function stopRecording(){
 
   mediaRecorder.onstop = ()=>{
     const blob = new Blob(chunks,{type:'video/webm'});
-    // envia para o index via postMessage para gerar QR Code
+    // envia para index via postMessage
     window.parent.postMessage({ videoBlob: blob }, '*');
   };
 }
