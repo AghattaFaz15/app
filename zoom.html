@@ -49,29 +49,35 @@ function getZoom(){
   return zoomScale;
 }
 
-// --- Slow/Speed orgânico ---
-function getSpeedFactor(t){
-  // alterna entre 0.3x e 3x de forma orgânica
-  return 0.3 + 2.7 * (0.5 + 0.5*Math.sin(t/1000 * Math.PI * 4)); 
+// --- Slow/Speed orgânico perceptível ---
+let lastFrame;
+function getSlowFactor(){
+  // alterna entre 0.3x e 2.5x
+  return 0.3 + Math.random()*2.2;
 }
 
-// --- Desenha no canvas ---
+// --- Desenha no canvas com slow orgânico ---
 function drawFrame(){
   if(!recording) return;
-  const elapsed = Date.now() - recordingStartTime;
-  const speedFactor = getSpeedFactor(elapsed);
-
   const scale = getZoom();
+
+  // decide se duplica o frame (lentidão)
+  const slowFactor = getSlowFactor();
+  if(!lastFrame || Math.random() < slowFactor){
+    lastFrame = mainVideo;
+  }
+
   ctx.save();
   ctx.clearRect(0,0,canvas.width,canvas.height);
   const w = canvas.width * scale;
   const h = canvas.height * scale;
   const dx = (canvas.width - w)/2;
   const dy = (canvas.height - h)/2;
-  ctx.drawImage(mainVideo, dx, dy, w, h);
+  ctx.drawImage(lastFrame, dx, dy, w, h);
   ctx.restore();
 
-  animFrame = setTimeout(drawFrame, 33 / speedFactor);
+  // próximo frame
+  animFrame = setTimeout(drawFrame, 33);
 }
 
 // --- Inicia gravação ---
@@ -97,7 +103,7 @@ function stopRecording(){
 
   mediaRecorder.onstop = ()=>{
     const blob = new Blob(chunks,{type:'video/webm'});
-    // envia para o index via postMessage
+    // envia para o index via postMessage para gerar QR Code
     window.parent.postMessage({ videoBlob: blob }, '*');
   };
 }
