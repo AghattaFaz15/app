@@ -20,7 +20,7 @@
   }
 
   #container-gravacao {
-    display: block; /* sempre visível inicialmente */
+    display: block; /* visível inicialmente */
   }
 
   video {
@@ -30,7 +30,7 @@
     border-radius: 10px;
     display: block;
     margin: 0 auto;
-    transform-origin: center center; /* para zoom no vídeo, não container */
+    transform-origin: center center; /* para zoom funcionar no vídeo */
   }
 
   button {
@@ -96,23 +96,11 @@ document.getElementById('startBtn').addEventListener('click', () => {
     const playback = document.getElementById('playback');
     playback.src = url;
 
-    // Zoom e slow motion só no playback
-    let scale = 1;
-    let growing = true;
-    setInterval(() => {
-      scale = growing ? 1.5 : 1;
-      playback.style.transform = `scale(${scale})`;
-      growing = !growing;
-    }, 4000);
-
-    let slow = true;
-    setInterval(() => {
-      playback.playbackRate = slow ? 0.5 : 2;
-      slow = !slow;
-    }, 4000);
-
     document.getElementById('container-gravacao').style.display = 'none';
     document.getElementById('container-visualizacao').style.display = 'block';
+
+    // Ativa zoom orgânico apenas depois que o vídeo aparecer
+    startOrganicZoom(playback);
   };
 
   mediaRecorder.start();
@@ -120,6 +108,28 @@ document.getElementById('startBtn').addEventListener('click', () => {
   // Para automaticamente em 10s
   setTimeout(() => mediaRecorder.stop(), 10000);
 });
+
+// Função de zoom orgânico usando requestAnimationFrame
+function startOrganicZoom(video) {
+  let scale = 1;
+  let direction = 1; // 1 = aumenta, -1 = diminui
+  const speed = 0.0008; // velocidade do zoom
+
+  function zoom() {
+    scale += direction * speed;
+    if (scale > 1.5) direction = -1;
+    if (scale < 1) direction = 1;
+    video.style.transform = `scale(${scale})`;
+    requestAnimationFrame(zoom);
+  }
+
+  video.playbackRate = 0.5; // começa slow motion
+  setInterval(() => {
+    video.playbackRate = video.playbackRate === 0.5 ? 2 : 0.5; // alterna velocidade
+  }, 4000);
+
+  zoom(); // inicia o zoom orgânico
+}
 
 // Gerar QR Code
 document.getElementById('gerarQRBtn').addEventListener('click', () => {
