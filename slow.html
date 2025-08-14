@@ -5,14 +5,13 @@
 <title>Slow Motion Profissional</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body { margin:0; padding:0; }
-video { display:none; }
-canvas { display:none; }
+  body { margin:0; padding:0; background:#000; }
+  video, canvas { display:none; }
 </style>
 </head>
 <body>
 
-<video id="cameraVideo" autoplay playsinline></video>
+<video id="cameraVideo" autoplay playsinline muted></video>
 <canvas id="videoCanvas"></canvas>
 
 <script>
@@ -25,84 +24,84 @@ let recording = false;
 let animFrame;
 
 const baseDuration = 10000; // 10s de gravação real
-const slowMultiplier = 2.0; // slow vai prolongar para ~20s
+const slowMultiplier = 2.0; // duração final ~20s
+const slowFactor = 2.0; // 2x mais lento que o tempo real
 
 // --- inicializa câmera ---
-async function initCamera(){
+async function initCamera() {
   stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'environment' }, audio:false });
   video.srcObject = stream;
-  await video.play();
+  await new Promise(resolve => video.onloadedmetadata = resolve);
   canvas.width = video.videoWidth || 640;
   canvas.height = video.videoHeight || 480;
 }
 
-// --- slow motion profissional ---
+// --- zoom dinâmico ---
 let zoomScale = 1;
 let zoomDir = 0.008;
-let lastFrame;
-
-function getZoom(){
+function getZoom() {
   zoomScale += zoomDir;
-  if(zoomScale>2 || zoomScale<1) zoomDir*=-1;
+  if (zoomScale > 1.5 || zoomScale < 1) zoomDir *= -1;
   return zoomScale;
 }
 
-function getSlowFactor(){
-  return 0.3 + Math.random()*5.7; // 0.3x → 6.0x
-}
-
-function drawFrame(){
-  if(!recording) return;
-
-  const scale = getZoom();
-  const slowFactor = getSlowFactor();
-
-  if(!lastFrame || Math.random() < slowFactor){
-    lastFrame = video;
-  }
+// --- desenha frames com slow motion e zoom ---
+function drawFrame() {
+  if (!recording) return;
 
   ctx.save();
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const scale = getZoom();
   const w = canvas.width * scale;
   const h = canvas.height * scale;
-  const dx = (canvas.width - w)/2;
-  const dy = (canvas.height - h)/2;
-  ctx.drawImage(lastFrame, dx, dy, w, h);
+  const dx = (canvas.width - w) / 2;
+  const dy = (canvas.height - h) / 2;
+
+  ctx.drawImage(video, dx, dy, w, h);
   ctx.restore();
 
-  animFrame = setTimeout(drawFrame, 33 / slowFactor);
+  animFrame = setTimeout(drawFrame, 33 * slowFactor); // ~30fps lento
 }
 
 // --- gravação ---
-async function startRecording(){
+async function startRecording() {
   chunks = [];
   recording = true;
 
   const canvasStream = canvas.captureStream(30);
   mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
-  mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+  mediaRecorder.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
   mediaRecorder.start();
 
   drawFrame();
 
-  // grava 10s, mas slow prolonga
-  setTimeout(stopRecording, baseDuration*slowMultiplier);
+  // grava por tempo prolongado pelo slowMultiplier
+  setTimeout(stopRecording, baseDuration * slowMultiplier);
 }
 
-function stopRecording(){
+function stopRecording() {
   recording = false;
   clearTimeout(animFrame);
-  mediaRecorder.stop();
 
-  mediaRecorder.onstop = ()=>{
-    const blob = new Blob(chunks,{type:'video/webm'});
-    // envia pro index
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(chunks, { type:'video/webm' });
+    // envia pro parent
     window.parent.postMessage({ videoBlob: blob }, '*');
+
+    // opcional: criar link para download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'slowmotion.webm';
+    a.click();
   };
+
+  mediaRecorder.stop();
 }
 
-// --- inicia ---
-initCamera().then(()=>startRecording());
+// --- inicia tudo ---
+initCamera().then(() => startRecording());
 </script>
 
 </body>
