@@ -2,111 +2,108 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>🎥 Slow Motion Profissional</title>
+<title>Slow Motion Profissional</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-:root { --azul:#0b132b; --dourado:#d4af37; }
-body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
-h2 { margin:20px 0; }
-video { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; }
+body { margin:0; padding:0; }
+video { display:none; }
 canvas { display:none; }
-button { padding:12px 22px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); margin:10px; box-shadow:0 6px 16px rgba(0,0,0,.25);}
 </style>
 </head>
 <body>
 
-<h2>🎥 Slow Motion Profissional</h2>
-<button id="startBtn">▶️ Gravar Slow</button>
-
-<video id="preview" autoplay muted playsinline></video>
-<canvas id="canvas"></canvas>
+<video id="cameraVideo" autoplay playsinline></video>
+<canvas id="videoCanvas"></canvas>
 
 <script>
-const startBtn = document.getElementById('startBtn');
-const preview = document.getElementById('preview');
-const canvas = document.getElementById('canvas');
+const video = document.getElementById('cameraVideo');
+const canvas = document.getElementById('videoCanvas');
 const ctx = canvas.getContext('2d');
 
-let mediaRecorder, chunks = [];
-let stream;
-let frames = [];
-const duration = 10000; // grava 10 segundos reais
-const slowMultiplier = 2; // 2x slow (final ~20s)
+let stream, mediaRecorder, chunks = [];
+let recording = false;
+let animFrame;
 
+const baseDuration = 10000; // 10s de gravação real
+const slowMultiplier = 2.0; // slow vai prolongar para ~20s
+
+// --- inicializa câmera ---
 async function initCamera(){
-  stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
-  preview.srcObject = stream;
-  await preview.play();
-  canvas.width = preview.videoWidth || 640;
-  canvas.height = preview.videoHeight || 480;
+  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'environment' }, audio:false });
+  video.srcObject = stream;
+  await video.play();
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
 }
 
-function captureFrame(){
-  ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
-  frames.push(ctx.getImageData(0,0,canvas.width,canvas.height));
+// --- slow motion profissional ---
+let zoomScale = 1;
+let zoomDir = 0.008;
+let lastFrame;
+
+function getZoom(){
+  zoomScale += zoomDir;
+  if(zoomScale>2 || zoomScale<1) zoomDir*=-1;
+  return zoomScale;
 }
 
-function playFramesSlow(){
-  return new Promise(resolve=>{
-    let i = 0;
-    function drawNext(){
-      if(i >= frames.length){
-        resolve();
-        return;
-      }
-      // desenha cada frame slowMultiplier vezes
-      let repeat = 0;
-      function repeatFrame(){
-        if(repeat >= slowMultiplier){
-          i++;
-          requestAnimationFrame(drawNext);
-          return;
-        }
-        ctx.putImageData(frames[i], 0, 0);
-        repeat++;
-        requestAnimationFrame(repeatFrame);
-      }
-      repeatFrame();
-    }
-    drawNext();
-  });
+function getSlowFactor(){
+  return 0.3 + Math.random()*5.7; // 0.3x → 6.0x
 }
 
+function drawFrame(){
+  if(!recording) return;
+
+  const scale = getZoom();
+  const slowFactor = getSlowFactor();
+
+  if(!lastFrame || Math.random() < slowFactor){
+    lastFrame = video;
+  }
+
+  ctx.save();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const w = canvas.width * scale;
+  const h = canvas.height * scale;
+  const dx = (canvas.width - w)/2;
+  const dy = (canvas.height - h)/2;
+  ctx.drawImage(lastFrame, dx, dy, w, h);
+  ctx.restore();
+
+  animFrame = setTimeout(drawFrame, 33 / slowFactor);
+}
+
+// --- gravação ---
 async function startRecording(){
   chunks = [];
-  frames = [];
-  startBtn.disabled = true;
+  recording = true;
 
   const canvasStream = canvas.captureStream(30);
   mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
   mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
   mediaRecorder.start();
 
-  const startTime = Date.now();
-  function captureLoop(){
-    if(Date.now() - startTime < duration){
-      captureFrame();
-      requestAnimationFrame(captureLoop);
-    } else {
-      // grava slow
-      playFramesSlow().then(()=>{
-        mediaRecorder.stop();
-      });
-    }
-  }
-  captureLoop();
+  drawFrame();
+
+  // grava 10s, mas slow prolonga
+  setTimeout(stopRecording, baseDuration*slowMultiplier);
 }
 
-// --- envia para o index ---
-mediaRecorder?.onstop = ()=>{
-  const blob = new Blob(chunks,{type:'video/webm'});
-  window.parent.postMessage({ videoBlob: blob }, '*');
-};
+function stopRecording(){
+  recording = false;
+  clearTimeout(animFrame);
+  mediaRecorder.stop();
 
-startBtn.onclick = async ()=>{
-  if(!stream) await initCamera();
-  startRecording();
-};
+  mediaRecorder.onstop = ()=>{
+    const blob = new Blob(chunks,{type:'video/webm'});
+    // envia pro index
+    window.parent.postMessage({ videoBlob: blob }, '*');
+  };
+}
+
+// --- inicia ---
+initCamera().then(()=>startRecording());
 </script>
+
 </body>
 </html>
