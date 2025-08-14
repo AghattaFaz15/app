@@ -42,28 +42,33 @@ function makeQR(url){
   new QRCode(qrBox, { text: url, width:200, height:200, correctLevel:QRCode.CorrectLevel.H });
 }
 
-// --- Recebe vídeo do iframe ---
+// --- Recebe mensagens do iframe ---
 window.addEventListener('message', async (e) => {
-  if(!e.data?.videoBlob || !e.data.source || e.data.source !== 'slowWorker') return;
-
-  const blob = e.data.videoBlob;
-  const url = URL.createObjectURL(blob);
-
-  previewVideo.src = url;
-  previewVideo.play();
-
-  previewVideo.oncanplay = () => {
-    music.currentTime = 0;
-    music.play();
-  };
-
-  previewVideo.onended = () => {
-    startBtn.disabled = false;
-    startBtn.textContent = '▶️ Novo Vídeo';
-  };
-
-  makeQR(url);
-  statusDiv.textContent = '✅ Gravação pronta!';
+  if(e.data?.stream && e.data.source==='slowWorker'){
+    previewVideo.srcObject = e.data.stream;
+    previewVideo.play();
+    statusDiv.textContent = '🎥 Gravando em tempo real...';
+  }
+  if(e.data?.videoBlob && e.data.source==='slowWorker'){
+    const blob = e.data.videoBlob;
+    const url = URL.createObjectURL(blob);
+    previewVideo.srcObject = null; // remove stream real-time
+    previewVideo.src = url;
+    previewVideo.play();
+    previewVideo.oncanplay = ()=>music.play();
+    previewVideo.onended = ()=>{
+      startBtn.disabled = false;
+      startBtn.textContent = '▶️ Novo Vídeo';
+    };
+    makeQR(url);
+    statusDiv.textContent = '✅ Gravação pronta!';
+    
+    // download automático
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'slowmotion.webm';
+    a.click();
+  }
 });
 
 // --- Botão iniciar gravação ---
@@ -72,7 +77,7 @@ startBtn.onclick = () => {
   startBtn.disabled = true;
   startBtn.textContent = '⏳ Gravando...';
 
-  // Força reload do iframe para cada gravação
+  // força reload do iframe
   workerFrame.src = 'slow.html?' + new Date().getTime();
 };
 </script>
