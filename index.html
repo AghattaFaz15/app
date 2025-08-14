@@ -2,83 +2,65 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>🎬 Hub 360° Zoom + Slow</title>
+<title>🎬 Gravação 360°</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root { --azul:#0b132b; --dourado:#d4af37; }
-body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
-h2 { margin:20px 0; }
+body { font-family:system-ui,sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px;}
 button { padding:12px 22px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); margin:10px; box-shadow:0 6px 16px rgba(0,0,0,.25);}
-video { width:100%; max-height:50vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; }
-#status { min-height:48px; margin:12px 0; font-weight:600; }
+video { width:100%; max-height:55vh; margin:10px auto; border:3px solid var(--dourado); }
 #qrCode { width:200px; height:200px; margin:20px auto; display:grid; place-items:center; border:2px solid var(--dourado); border-radius:12px; }
-iframe { display:none; }
+iframe { display:none; width:0; height:0; }
 </style>
 </head>
 <body>
 
-<h2>🎬 Hub de Gravação 360°</h2>
+<h2>🎬 Gravação 360° Integrada</h2>
 <button id="startBtn">▶️ Iniciar Gravação</button>
-<audio id="bgMusic" src="musica.mp3" loop></audio>
+<audio id="bgMusic" src="musica.mp3" preload="auto"></audio>
 
-<video id="previewVideo" autoplay muted playsinline></video>
-<div id="status">⏳ Aguardando início...</div>
+<video id="previewVideo" controls></video>
 <div id="qrCode"></div>
 
-<!-- Iframes ocultos para zoom e slow -->
 <iframe id="zoomFrame" src="zoom.html"></iframe>
 <iframe id="slowFrame" src="slow.html"></iframe>
 
 <script>
 const startBtn = document.getElementById('startBtn');
+const zoomFrame = document.getElementById('zoomFrame');
+const slowFrame = document.getElementById('slowFrame');
 const previewVideo = document.getElementById('previewVideo');
-const statusDiv = document.getElementById('status');
 const qrBox = document.getElementById('qrCode');
 const bgMusic = document.getElementById('bgMusic');
 
-let receivedVideos = [];
-let recordingInProgress = false;
-
-// QR Code
+let chunksReceived = [];
 function makeQR(url){
   qrBox.innerHTML = '';
   new QRCode(qrBox, { text:url, width:200, height:200, correctLevel:QRCode.CorrectLevel.H });
 }
 
-// Recebe vídeos via postMessage
-window.addEventListener('message', e => {
+// Recebe o vídeo dos iframes
+window.addEventListener('message', e=>{
   if(e.data.videoBlob){
-    const url = URL.createObjectURL(e.data.videoBlob);
-    receivedVideos.push(url);
-    previewVideo.src = url; // mostra preview
+    const blob = e.data.videoBlob;
+    const url = URL.createObjectURL(blob);
+    previewVideo.src = url;
+    previewVideo.play();
     makeQR(url);
-    statusDiv.textContent = `✅ Vídeo recebido (${receivedVideos.length})`;
-    recordingInProgress = false;
-    startBtn.disabled = false;
-    startBtn.textContent = '▶️ Novo Vídeo';
   }
 });
 
-// Inicia gravação
-startBtn.onclick = () => {
-  if(recordingInProgress) return;
-  recordingInProgress = true;
-  receivedVideos = [];
+startBtn.onclick = ()=>{
+  chunksReceived = [];
   previewVideo.src = '';
   qrBox.innerHTML = '';
-  statusDiv.textContent = '🔴 Gravando...';
-  startBtn.disabled = true;
-  startBtn.textContent = '⏳ Gravando...';
-
-  // Toca música
   bgMusic.currentTime = 0;
   bgMusic.play();
-
-  // Envia mensagem para iframes iniciarem gravação
-  document.getElementById('zoomFrame').contentWindow.postMessage({ action:'start' }, '*');
-  document.getElementById('slowFrame').contentWindow.postMessage({ action:'start' }, '*');
+  zoomFrame.contentWindow.postMessage({ action:'start' }, '*');
+  slowFrame.contentWindow.postMessage({ action:'start' }, '*');
 };
 </script>
+
 </body>
 </html>
