@@ -15,7 +15,6 @@ canvas { display:none; }
 <body>
 
 <h2>🎬 Zoom + Slow/Speed Orgânico</h2>
-
 <video id="mainVideo" autoplay muted playsinline></video>
 <canvas id="videoCanvas"></canvas>
 
@@ -27,10 +26,11 @@ const ctx = canvas.getContext('2d');
 let mediaRecorder, chunks = [];
 let stream;
 let recording = false;
-let frameTimes = [];
-const totalDuration = 20000; // 20 segundos
-const targetFPS = 30;
-let frameIndex = 0;
+let lastFrameTime = 0;
+let animFrame;
+const captureDuration = 10000; // 10 segundos "reais"
+const zoomMax = 2;
+const zoomMin = 1;
 
 // --- Inicializa câmera ---
 async function initCamera(){
@@ -46,62 +46,67 @@ let zoomScale = 1;
 let zoomDirection = 0.008;
 function getZoom(){ 
   zoomScale += zoomDirection; 
-  if(zoomScale > 2 || zoomScale < 1) zoomDirection *= -1;
+  if(zoomScale > zoomMax || zoomScale < zoomMin) zoomDirection *= -1;
   return zoomScale;
 }
 
 // --- Slow/Speed orgânico ---
-function getFrameMultiplier(){
-  // alterna entre 0.3x (slow) e 3x (fast)
-  return 0.3 + Math.random()*2.7;
+function getSlowMultiplier(){
+  // alterna entre 0.3x (lentidão) e 2.5x (aceleração)
+  return 0.3 + Math.random()*2.2;
 }
 
-// --- Desenha no canvas com slow/fast perceptível ---
-function drawFrame(){
+// --- Desenha no canvas com slow/fast ---
+function drawFrame(timestamp){
   if(!recording) return;
 
-  const scale = getZoom();
-  const multiplier = getFrameMultiplier();
+  const now = Date.now();
+  const delta = now - lastFrameTime;
+  let slowMult = getSlowMultiplier();
 
-  ctx.save();
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  const w = canvas.width * scale;
-  const h = canvas.height * scale;
-  const dx = (canvas.width - w)/2;
-  const dy = (canvas.height - h)/2;
-  ctx.drawImage(mainVideo, dx, dy, w, h);
-  ctx.restore();
+  // controla o tempo "real" de captura (~10s)
+  if(delta * slowMult >= 33){
+    lastFrameTime = now;
+    const scale = getZoom();
+    ctx.save();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const w = canvas.width * scale;
+    const h = canvas.height * scale;
+    const dx = (canvas.width - w)/2;
+    const dy = (canvas.height - h)/2;
+    ctx.drawImage(mainVideo, dx, dy, w, h);
+    ctx.restore();
+  }
 
-  // duplicar frame para slowmotion
-  const nextDelay = 1000 / (targetFPS * multiplier);
-  frameIndex++;
-  animFrame = setTimeout(drawFrame, nextDelay);
+  animFrame = requestAnimationFrame(drawFrame);
 }
 
 // --- Inicia gravação ---
 function startRecording(){
   chunks = [];
   recording = true;
-  frameIndex = 0;
+  lastFrameTime = Date.now();
 
-  const canvasStream = canvas.captureStream(targetFPS);
+  const canvasStream = canvas.captureStream(30);
   mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
   mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
   mediaRecorder.start();
 
   drawFrame();
-  setTimeout(stopRecording, totalDuration);
+
+  // para gravação após 10 segundos "reais"
+  setTimeout(stopRecording, captureDuration);
 }
 
 // --- Para gravação ---
 function stopRecording(){
   recording = false;
-  clearTimeout(animFrame);
+  cancelAnimationFrame(animFrame);
   mediaRecorder.stop();
 
   mediaRecorder.onstop = ()=>{
     const blob = new Blob(chunks,{type:'video/webm'});
-    // envia para index via postMessage
+    // envia para o index para gerar QR Code
     window.parent.postMessage({ videoBlob: blob }, '*');
   };
 }
