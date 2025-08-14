@@ -2,27 +2,33 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>🎬 Hub Gravação 360°</title>
+<title>🎬 Hub 360° Zoom + Slow</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root { --azul:#0b132b; --dourado:#d4af37; }
 body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
 h2 { margin:20px 0; }
-button { padding:15px 25px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); margin:10px; box-shadow:0 6px 16px rgba(0,0,0,.25);}
-video { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; }
+button { padding:12px 22px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); margin:10px; box-shadow:0 6px 16px rgba(0,0,0,.25);}
+video { width:100%; max-height:50vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; }
 #status { min-height:48px; margin:12px 0; font-weight:600; }
 #qrCode { width:200px; height:200px; margin:20px auto; display:grid; place-items:center; border:2px solid var(--dourado); border-radius:12px; }
+iframe { display:none; }
 </style>
 </head>
 <body>
 
-<h2>🎬 Hub Zoom + Slow + QR Code</h2>
+<h2>🎬 Hub de Gravação 360°</h2>
 <button id="startBtn">▶️ Iniciar Gravação</button>
-<video id="previewVideo" autoplay playsinline muted></video>
-<div id="status">⏳ Aguardando...</div>
+<audio id="bgMusic" src="musica.mp3" loop></audio>
+
+<video id="previewVideo" autoplay muted playsinline></video>
+<div id="status">⏳ Aguardando início...</div>
 <div id="qrCode"></div>
-<audio id="bgMusic" src="musica.mp3"></audio>
+
+<!-- Iframes ocultos para zoom e slow -->
+<iframe id="zoomFrame" src="zoom.html"></iframe>
+<iframe id="slowFrame" src="slow.html"></iframe>
 
 <script>
 const startBtn = document.getElementById('startBtn');
@@ -31,58 +37,48 @@ const statusDiv = document.getElementById('status');
 const qrBox = document.getElementById('qrCode');
 const bgMusic = document.getElementById('bgMusic');
 
-let mediaRecorder, chunks = [];
-let stream;
+let receivedVideos = [];
+let recordingInProgress = false;
 
-// --- QR Code ---
+// QR Code
 function makeQR(url){
   qrBox.innerHTML = '';
-  new QRCode(qrBox, { text: url, width:200, height:200, correctLevel:QRCode.CorrectLevel.H });
+  new QRCode(qrBox, { text:url, width:200, height:200, correctLevel:QRCode.CorrectLevel.H });
 }
 
-// --- Inicializa câmera e preview ---
-async function initCamera(){
-  try{
-    stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
-    previewVideo.srcObject = stream;
-  }catch(err){
-    alert("Erro ao acessar a câmera: "+err.message);
+// Recebe vídeos via postMessage
+window.addEventListener('message', e => {
+  if(e.data.videoBlob){
+    const url = URL.createObjectURL(e.data.videoBlob);
+    receivedVideos.push(url);
+    previewVideo.src = url; // mostra preview
+    makeQR(url);
+    statusDiv.textContent = `✅ Vídeo recebido (${receivedVideos.length})`;
+    recordingInProgress = false;
+    startBtn.disabled = false;
+    startBtn.textContent = '▶️ Novo Vídeo';
   }
-}
+});
 
-// --- Inicia gravação do Zoom ---
-function startZoomRecording(){
-  chunks = [];
-  statusDiv.textContent = "🔴 Gravando Zoom...";
+// Inicia gravação
+startBtn.onclick = () => {
+  if(recordingInProgress) return;
+  recordingInProgress = true;
+  receivedVideos = [];
+  previewVideo.src = '';
+  qrBox.innerHTML = '';
+  statusDiv.textContent = '🔴 Gravando...';
+  startBtn.disabled = true;
+  startBtn.textContent = '⏳ Gravando...';
+
+  // Toca música
+  bgMusic.currentTime = 0;
   bgMusic.play();
 
-  const options = { mimeType:'video/webm;codecs=vp9' };
-  mediaRecorder = new MediaRecorder(stream, options);
-
-  mediaRecorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(chunks, { type:'video/webm' });
-    const url = URL.createObjectURL(blob);
-    statusDiv.innerHTML = `✅ Zoom finalizado!<br><a href="${url}" target="_blank">Abrir vídeo</a>`;
-    makeQR(url);
-
-    // Após zoom, chama slow.html
-    setTimeout(() => {
-      window.open('slow.html','_blank');
-    }, 1500);
-  };
-
-  mediaRecorder.start();
-  setTimeout(()=>mediaRecorder.stop(), 10000); // grava 10s
-}
-
-// --- Botão iniciar ---
-startBtn.onclick = async ()=>{
-  startBtn.disabled = true;
-  await initCamera();
-  startZoomRecording();
+  // Envia mensagem para iframes iniciarem gravação
+  document.getElementById('zoomFrame').contentWindow.postMessage({ action:'start' }, '*');
+  document.getElementById('slowFrame').contentWindow.postMessage({ action:'start' }, '*');
 };
 </script>
-
 </body>
 </html>
