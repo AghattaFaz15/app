@@ -2,15 +2,13 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Slow Motion Profissional</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slow Motion Worker</title>
 <style>
-  body { margin:0; padding:0; background:#000; }
-  video, canvas { display:none; }
+body { margin:0; padding:0; background:#000; }
+video, canvas { display:none; }
 </style>
 </head>
 <body>
-
 <video id="cameraVideo" autoplay playsinline muted></video>
 <canvas id="videoCanvas"></canvas>
 
@@ -20,16 +18,15 @@ const canvas = document.getElementById('videoCanvas');
 const ctx = canvas.getContext('2d');
 
 let stream, mediaRecorder, chunks = [];
-let recording = false;
-let animFrame;
+let recording = false, animFrame;
 
 const baseDuration = 10000; // 10s de gravação real
-const slowMultiplier = 2.0; // duração final ~20s
-const slowFactor = 2.0; // 2x mais lento que o tempo real
+const slowMultiplier = 2.0; // slow prolonga ~20s
+const slowFactor = 2.0; // 2x mais lento
 
 // --- inicializa câmera ---
-async function initCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'environment' }, audio:false });
+async function initCamera(){
+  stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
   video.srcObject = stream;
   await new Promise(resolve => video.onloadedmetadata = resolve);
   canvas.width = video.videoWidth || 640;
@@ -37,72 +34,59 @@ async function initCamera() {
 }
 
 // --- zoom dinâmico ---
-let zoomScale = 1;
-let zoomDir = 0.008;
-function getZoom() {
+let zoomScale = 1, zoomDir = 0.008;
+function getZoom(){
   zoomScale += zoomDir;
-  if (zoomScale > 1.5 || zoomScale < 1) zoomDir *= -1;
+  if(zoomScale>1.5||zoomScale<1) zoomDir*=-1;
   return zoomScale;
 }
 
-// --- desenha frames com slow motion e zoom ---
-function drawFrame() {
-  if (!recording) return;
-
+// --- desenha frames ---
+function drawFrame(){
+  if(!recording) return;
   ctx.save();
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+  ctx.clearRect(0,0,canvas.width,canvas.height);
   const scale = getZoom();
-  const w = canvas.width * scale;
-  const h = canvas.height * scale;
-  const dx = (canvas.width - w) / 2;
-  const dy = (canvas.height - h) / 2;
-
+  const w = canvas.width*scale;
+  const h = canvas.height*scale;
+  const dx = (canvas.width-w)/2;
+  const dy = (canvas.height-h)/2;
   ctx.drawImage(video, dx, dy, w, h);
   ctx.restore();
-
-  animFrame = setTimeout(drawFrame, 33 * slowFactor); // ~30fps lento
+  animFrame = setTimeout(drawFrame, 33*slowFactor);
 }
 
 // --- gravação ---
-async function startRecording() {
+async function startRecording(){
   chunks = [];
   recording = true;
 
   const canvasStream = canvas.captureStream(30);
+
+  // envia stream para visualização em tempo real
+  window.parent.postMessage({ stream: canvasStream, source:'slowWorker' }, '*');
+
   mediaRecorder = new MediaRecorder(canvasStream, { mimeType:'video/webm;codecs=vp8' });
   mediaRecorder.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
   mediaRecorder.start();
 
   drawFrame();
 
-  // grava por tempo prolongado pelo slowMultiplier
-  setTimeout(stopRecording, baseDuration * slowMultiplier);
+  setTimeout(stopRecording, baseDuration*slowMultiplier);
 }
 
-function stopRecording() {
-  recording = false;
+function stopRecording(){
+  recording=false;
   clearTimeout(animFrame);
-
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(chunks, { type:'video/webm' });
-    // envia pro parent
-    window.parent.postMessage({ videoBlob: blob }, '*');
-
-    // opcional: criar link para download
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'slowmotion.webm';
-    a.click();
+  mediaRecorder.onstop = ()=>{
+    const blob = new Blob(chunks,{type:'video/webm'});
+    window.parent.postMessage({ videoBlob: blob, source:'slowWorker' }, '*');
   };
-
   mediaRecorder.stop();
 }
 
-// --- inicia tudo ---
-initCamera().then(() => startRecording());
+// --- inicia ---
+initCamera().then(()=>startRecording());
 </script>
-
 </body>
 </html>
