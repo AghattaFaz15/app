@@ -18,7 +18,6 @@ video { width:100%; display:block; transform-origin:center center; }
 </div>
 
 <script>
-// pega URL do vídeo da query string
 const params = new URLSearchParams(window.location.search);
 const videoUrl = params.get('videoUrl');
 if(videoUrl){
@@ -31,13 +30,13 @@ if(videoUrl){
     video.playbackRate = video.playbackRate===0.5 ? 2 : 0.5;
   },4000);
 
-  // zoom orgânico
+  // zoom maior e orgânico
   let scale=1, direction=1;
-  const speed=0.0005;
+  const speed=0.0008; // zoom mais perceptível
   function zoom(){
     scale+=direction*speed;
-    if(scale>1.2) direction=-1;
-    if(scale<1) direction=1;
+    if(scale>1.6) direction=-1; // zoom máximo 1.6x
+    if(scale<1) direction=1;     // zoom mínimo 1x
     video.style.transform=`scale(${scale})`;
     requestAnimationFrame(zoom);
   }
