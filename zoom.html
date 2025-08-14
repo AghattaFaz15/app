@@ -2,16 +2,20 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Zoom Orgânico</title>
+<title>🎬 Zoom + Slow Profissional</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body,html{margin:0;padding:0;overflow:hidden;background:#000;}
-video{display:none;}
-canvas{width:100%;height:100%;}
+:root { --azul:#0b132b; --dourado:#d4af37; }
+body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
+h2 { margin:20px 0; }
+video { display:none; }
+canvas { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; transform-origin:center center; }
 </style>
 </head>
 <body>
 
-<video id="mainVideo" autoplay playsinline></video>
+<h2>🎬 Zoom + Slow Motion Profissional</h2>
+<video id="mainVideo" autoplay muted playsinline></video>
 <canvas id="videoCanvas"></canvas>
 
 <script>
@@ -19,59 +23,102 @@ const mainVideo = document.getElementById('mainVideo');
 const canvas = document.getElementById('videoCanvas');
 const ctx = canvas.getContext('2d');
 
-let mediaRecorder, chunks=[], recording=false, animFrame;
-const totalDuration = 10000; // 10s base
+let mediaRecorder, chunks = [];
+let stream;
+let recording = false;
+let startTime;
+const baseDuration = 10000; // 10s real
+const targetDuration = 20000; // 20s final (slow factor)
 
 async function initCamera(){
-  const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
+  stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
   mainVideo.srcObject = stream;
   await mainVideo.play();
-  canvas.width = mainVideo.videoWidth||640;
-  canvas.height = mainVideo.videoHeight||480;
+  canvas.width = mainVideo.videoWidth || 640;
+  canvas.height = mainVideo.videoHeight || 480;
 }
 
 // Zoom orgânico
-let zoomScale = 1, zoomDir=0.008;
-function getZoom(){ zoomScale += zoomDir; if(zoomScale>2||zoomScale<1) zoomDir*=-1; return zoomScale; }
+let zoomScale = 1;
+let zoomDirection = 0.008;
+function getZoom(){ 
+  zoomScale += zoomDirection; 
+  if(zoomScale>2 || zoomScale<1) zoomDirection*=-1;
+  return zoomScale;
+}
 
+// Slow motion profissional
+let frameHistory = [];
+let slowFactor = targetDuration/baseDuration; // 2x por padrão
+function captureFrame(){
+  // duplica frames para estender o tempo
+  const frame = document.createElement('canvas');
+  frame.width = canvas.width;
+  frame.height = canvas.height;
+  frame.getContext('2d').drawImage(mainVideo, 0, 0, canvas.width, canvas.height);
+  frameHistory.push(frame);
+}
+
+// Desenha no canvas com zoom + slow
+let currentFrameIndex = 0;
 function drawFrame(){
   if(!recording) return;
+  if(currentFrameIndex >= frameHistory.length) currentFrameIndex = frameHistory.length -1;
+
   const scale = getZoom();
+  ctx.save();
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  const w = canvas.width*scale, h = canvas.height*scale;
-  const dx = (canvas.width-w)/2, dy=(canvas.height-h)/2;
-  ctx.drawImage(mainVideo,dx,dy,w,h);
-  animFrame = requestAnimationFrame(drawFrame);
+
+  const frame = frameHistory[currentFrameIndex];
+  const w = canvas.width * scale;
+  const h = canvas.height * scale;
+  const dx = (canvas.width - w)/2;
+  const dy = (canvas.height - h)/2;
+  ctx.drawImage(frame, dx, dy, w, h);
+  ctx.restore();
+
+  // incrementa frame de acordo com slow
+  currentFrameIndex += 1/slowFactor;
+  requestAnimationFrame(drawFrame);
 }
 
-function startRecording(){
-  chunks=[];
-  recording=true;
-  drawFrame();
-  const canvasStream = canvas.captureStream(30);
-  mediaRecorder = new MediaRecorder(canvasStream,{mimeType:'video/webm;codecs=vp8'});
-  mediaRecorder.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
-  mediaRecorder.start();
-  setTimeout(stopRecording,totalDuration);
+// Inicia gravação
+async function startRecording(){
+  chunks = [];
+  frameHistory = [];
+  recording = true;
+  currentFrameIndex = 0;
+  startTime = Date.now();
+
+  // captura frames durante 10s reais
+  const captureInterval = setInterval(captureFrame, 33);
+  setTimeout(()=>{
+    clearInterval(captureInterval);
+
+    // grava com MediaRecorder
+    const streamCanvas = canvas.captureStream(30);
+    mediaRecorder = new MediaRecorder(streamCanvas, { mimeType:'video/webm;codecs=vp8' });
+    mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+    mediaRecorder.onstop = ()=>{
+      const blob = new Blob(chunks,{type:'video/webm'});
+      window.parent.postMessage({ videoBlob: blob }, '*'); // envia para index
+    };
+    mediaRecorder.start();
+    drawFrame();
+
+    // tempo final do vídeo (slow)
+    setTimeout(stopRecording, targetDuration);
+  }, baseDuration);
 }
 
+// Para gravação
 function stopRecording(){
-  recording=false;
-  cancelAnimationFrame(animFrame);
+  recording = false;
   mediaRecorder.stop();
-  mediaRecorder.onstop=()=>{
-    const blob = new Blob(chunks,{type:'video/webm'});
-    window.parent.postMessage({ videoBlob: blob }, '*');
-  };
 }
 
-// Recebe start do index
-window.addEventListener('message', e=>{
-  if(e.data.action==='start'){
-    initCamera().then(startRecording);
-  }
-});
+// Inicia tudo
+initCamera();
 </script>
-
 </body>
 </html>
