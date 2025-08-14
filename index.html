@@ -2,84 +2,97 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Zoom + Slow + Música + QR Code</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<title>Gravação de Vídeo</title>
 <style>
-:root { --azul:#0b132b; --dourado:#d4af37; }
-body { font-family: system-ui, sans-serif; text-align:center; background:var(--azul); color:#fff; margin:0; padding:30px; }
-h2 { margin:20px 0; }
-button { padding:12px 22px; font-size:18px; border:none; border-radius:10px; cursor:pointer; color:#fff; background:var(--dourado); margin:10px; box-shadow:0 6px 16px rgba(0,0,0,.25);}
-video { width:100%; max-height:55vh; object-fit:cover; border:3px solid var(--dourado); margin-bottom:15px; }
-#status { min-height:48px; margin:12px 0; font-weight:600; }
-#qrCode { width:200px; height:200px; margin:20px auto; display:grid; place-items:center; border:2px solid var(--dourado); border-radius:12px; }
-iframe { display:none; }
+  body {
+    font-family: Arial, sans-serif;
+    background: #001f3f;
+    color: white;
+    text-align: center;
+    padding: 20px;
+  }
+  video {
+    width: 90%;
+    max-width: 400px;
+    border: 3px solid gold;
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  button {
+    padding: 10px 20px;
+    margin: 5px;
+    border: none;
+    background: gold;
+    color: black;
+    font-weight: bold;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  #downloadLink {
+    display: none;
+    margin-top: 10px;
+  }
 </style>
 </head>
 <body>
 
-<h2>🎬 Zoom + Slow Motion Profissional</h2>
-<button id="startBtn">▶️ Iniciar Gravação</button>
+<h1>🎥 Gravação de Vídeo</h1>
 
-<video id="previewVideo" controls></video>
-<div id="status">⏳ Aguardando início...</div>
-<div id="qrCode"></div>
-<audio id="bgMusic" src="musica.mp3"></audio>
+<video id="preview" autoplay playsinline muted></video>
+<video id="playback" controls style="display:none;"></video>
 
-<iframe id="workerFrame"></iframe>
+<div>
+  <button id="startBtn">Iniciar Gravação</button>
+  <button id="stopBtn" disabled>Parar Gravação</button>
+</div>
+
+<a id="downloadLink" download="video.mp4">📥 Baixar Vídeo</a>
 
 <script>
-const startBtn = document.getElementById('startBtn');
-const previewVideo = document.getElementById('previewVideo');
-const statusDiv = document.getElementById('status');
-const qrBox = document.getElementById('qrCode');
-const music = document.getElementById('bgMusic');
-const workerFrame = document.getElementById('workerFrame');
+let mediaRecorder;
+let recordedChunks = [];
+let stream;
 
-// --- Função QR Code ---
-function makeQR(url){
-  qrBox.innerHTML = '';
-  new QRCode(qrBox, { text: url, width:200, height:200, correctLevel:QRCode.CorrectLevel.H });
-}
+document.getElementById("startBtn").addEventListener("click", async () => {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    document.getElementById("preview").srcObject = stream;
 
-// --- Recebe mensagens do iframe ---
-window.addEventListener('message', async (e) => {
-  if(e.data?.stream && e.data.source==='slowWorker'){
-    previewVideo.srcObject = e.data.stream;
-    previewVideo.play();
-    statusDiv.textContent = '🎥 Gravando em tempo real...';
-  }
-  if(e.data?.videoBlob && e.data.source==='slowWorker'){
-    const blob = e.data.videoBlob;
-    const url = URL.createObjectURL(blob);
-    previewVideo.srcObject = null; // remove stream real-time
-    previewVideo.src = url;
-    previewVideo.play();
-    previewVideo.oncanplay = ()=>music.play();
-    previewVideo.onended = ()=>{
-      startBtn.disabled = false;
-      startBtn.textContent = '▶️ Novo Vídeo';
-    };
-    makeQR(url);
-    statusDiv.textContent = '✅ Gravação pronta!';
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
     
-    // download automático
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'slowmotion.webm';
-    a.click();
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+    
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: "video/mp4" });
+      const url = URL.createObjectURL(blob);
+
+      const playback = document.getElementById("playback");
+      playback.src = url;
+      playback.style.display = "block";
+
+      const link = document.getElementById("downloadLink");
+      link.href = url;
+      link.style.display = "block";
+    };
+    
+    mediaRecorder.start();
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+
+  } catch (err) {
+    alert("Erro ao acessar câmera/microfone: " + err);
   }
 });
 
-// --- Botão iniciar gravação ---
-startBtn.onclick = () => {
-  statusDiv.textContent = '⏳ Gravando...';
-  startBtn.disabled = true;
-  startBtn.textContent = '⏳ Gravando...';
-
-  // força reload do iframe
-  workerFrame.src = 'slow.html?' + new Date().getTime();
-};
+document.getElementById("stopBtn").addEventListener("click", () => {
+  mediaRecorder.stop();
+  stream.getTracks().forEach(track => track.stop());
+  document.getElementById("stopBtn").disabled = true;
+});
 </script>
 
 </body>
