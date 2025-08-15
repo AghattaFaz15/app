@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gravação + Zoom + Slow Cloudinary</title>
+<title>Gravação + Slow + Zoom</title>
 <style>
 body { background:black; color:white; font-family:Arial; text-align:center; margin:0; padding:0; }
 h1 { color:gold; }
@@ -15,33 +15,32 @@ button { background:gold; color:black; padding:10px 20px; border:none; border-ra
 </head>
 <body>
 
-<h1>🎥 Gravação + Zoom + Slow Real</h1>
+<h1>🎥 Gravação + Zoom + Slow Motion</h1>
 <div class="video-wrapper">
   <video id="camera" autoplay muted playsinline></video>
 </div>
 <br>
 <button id="startBtn">▶️ Gravar 10s</button>
-
-<h2>🎬 Vídeo Final</h2>
+<h2>🎬 Gravação Final</h2>
 <div class="video-wrapper">
-  <video id="finalVideo" controls></video>
+  <video id="finalVideo" controls autoplay loop playsinline></video>
 </div>
-
 <div id="qrcode"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 const CLOUD_NAME = "dxobnhynf";
-const UPLOAD_PRESET = "ml_default"; // seu preset
+const UPLOAD_PRESET = "ml_default";
 const cameraVideo = document.getElementById("camera");
 const finalVideo = document.getElementById("finalVideo");
 let mediaRecorder, recordedChunks = [], stream;
 
-// Inicia câmera traseira
+// Inicia câmera traseira com fallback
 async function startCamera() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } }, audio: false });
-  } catch(e){
+  } catch(e) {
+    // fallback para frontal
     stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
   }
   cameraVideo.srcObject = stream;
@@ -56,43 +55,61 @@ document.getElementById("startBtn").addEventListener("click", async () => {
   
   mediaRecorder.onstop = async () => {
     const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    const file = new File([blob], "video.webm", { type: 'video/webm' });
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", UPLOAD_PRESET);
+    const url = URL.createObjectURL(blob);
+
+    // Exibe gravação final
+    finalVideo.src = url;
+    finalVideo.loop = true;
+    finalVideo.play();
+    
+    // Slow/Fast alternando
+    finalVideo.playbackRate = 0.5;
+    setInterval(() => {
+      finalVideo.playbackRate = finalVideo.playbackRate===0.5?2:0.5;
+    }, 4000);
+
+    // Zoom orgânico no vídeo final
+    let scale = 1, dir = 1;
+    function zoom() {
+      scale += dir*0.0008;
+      if(scale>=1.6) dir=-1;
+      if(scale<=1) dir=1;
+      finalVideo.style.transform = `scale(${scale})`;
+      requestAnimationFrame(zoom);
+    }
+    zoom();
 
     // Upload para Cloudinary
-    try{
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, { method:"POST", body:formData });
+    try {
+      const file = new File([blob], "video.webm", { type: 'video/webm' });
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", UPLOAD_PRESET);
+
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, { method: "POST", body: formData });
       const data = await res.json();
 
-      // Gera link transformado: slow + zoom
-      const transformedUrl = `https://res.cloudinary.com/${CLOUD_NAME}/video/upload/e_slowmotion:2,c_fill,g_auto,h_720,w_1280/${data.public_id}.webm`;
-
-      // Mostra player final
-      finalVideo.src = transformedUrl;
-      finalVideo.loop = true;
-      finalVideo.play();
-
-      // QR Code
-      document.getElementById("qrcode").innerHTML = "";
-      new QRCode(document.getElementById("qrcode"), transformedUrl);
-
-    } catch(err){
-      console.error("Erro upload:", err);
+      if(data.secure_url){
+        document.getElementById("qrcode").innerHTML = "";
+        new QRCode(document.getElementById("qrcode"), data.secure_url);
+      } else {
+        console.error("Upload falhou:", data);
+      }
+    } catch(err) {
+      console.error("Erro no upload:", err);
     }
   };
 
   mediaRecorder.start();
 
-  // Zoom orgânico durante gravação
+  // Zoom orgânico na câmera durante gravação
   let scale = 1, dir = 1;
   const zoomInterval = setInterval(() => {
     scale += dir*0.01;
     if(scale>=1.6) dir=-1;
     if(scale<=1) dir=1;
     cameraVideo.style.transform = `scale(${scale})`;
-  },50);
+  }, 50);
 
   // Para gravação após 10s
   setTimeout(()=>{
@@ -100,7 +117,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     clearInterval(zoomInterval);
     stream.getTracks().forEach(track=>track.stop());
     cameraVideo.style.transform = "scale(1)";
-  },10000);
+  }, 10000);
 });
 </script>
 
