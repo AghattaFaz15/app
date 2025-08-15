@@ -3,52 +3,93 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gravação</title>
+<title>Gravar, Slow + Zoom</title>
 <style>
 body { background:black; color:white; font-family:Arial; text-align:center; margin:0; padding:0; }
-.video-wrapper { width:100%; max-width:500px; margin:0 auto; overflow:hidden; border:2px solid gold; border-radius:10px; }
-video { width:100%; display:block; transform-origin:center center; }
-button { padding:10px 20px; margin-top:10px; font-size:16px; background:gold; border:none; border-radius:5px; cursor:pointer; }
+h1 { color:gold; }
+video { width:100%; max-width:500px; border:2px solid gold; border-radius:10px; display:block; margin:auto; transform-origin:center center; }
+#qrcode { margin-top:20px; }
+button { background:gold; color:black; padding:10px 20px; border:none; border-radius:5px; font-size:16px; margin:10px; cursor:pointer; }
 </style>
 </head>
 <body>
 
-<h2>🎥 Gravação</h2>
-<div class="video-wrapper">
-  <video id="preview" autoplay playsinline></video>
-</div>
+<h1>🎥 Slow Motion + Zoom</h1>
+<video id="preview" autoplay muted playsinline></video>
 <br>
-<button id="startBtn">🎬 Gravar 10s</button>
-<button id="playbackBtn" disabled>▶️ Ver Playback</button>
+<button id="startBtn">▶️ Iniciar Gravação (10s)</button>
+<div id="qrcode"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
-let stream, mediaRecorder, recordedChunks=[];
+const CLOUD_NAME = "dxobnhynf";
+const UPLOAD_PRESET = "default_preset"; // coloque o nome do seu preset
 
-async function startCamera(){
-  stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-  document.getElementById('preview').srcObject = stream;
-}
-startCamera();
+const videoEl = document.getElementById('preview');
+let mediaRecorder, recordedChunks = [];
 
-document.getElementById('startBtn').addEventListener('click', ()=>{
-  recordedChunks=[];
+document.getElementById('startBtn').addEventListener('click', async () => {
+  recordedChunks = [];
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  videoEl.srcObject = stream;
+
   mediaRecorder = new MediaRecorder(stream);
-  mediaRecorder.ondataavailable = e=>{ if(e.data.size>0) recordedChunks.push(e.data); };
-  mediaRecorder.onstop = ()=>{ document.getElementById('playbackBtn').disabled=false; };
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = async () => {
+    const blob = new Blob(recordedChunks, { type: 'video/mp4' });
+    const file = new File([blob], "video.mp4", { type: 'video/mp4' });
+
+    // Upload para Cloudinary
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", UPLOAD_PRESET);
+
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    const videoUrl = data.secure_url;
+
+    // Mostra QRCode
+    document.getElementById('qrcode').innerHTML = "";
+    new QRCode(document.getElementById("qrcode"), videoUrl);
+
+    // Reproduzir com slow+zoom
+    playWithEffects(videoUrl);
+  };
+
   mediaRecorder.start();
-
-  // Garantir 10s exatas usando setTimeout
-  setTimeout(()=>{ 
-    if(mediaRecorder.state !== "inactive") mediaRecorder.stop(); 
-  }, 10000);
+  setTimeout(() => {
+    mediaRecorder.stop();
+    stream.getTracks().forEach(track => track.stop());
+  }, 10000); // 10 segundos
 });
 
-// Botão playback abre novo HTML com o Blob
-document.getElementById('playbackBtn').addEventListener('click', ()=>{
-  const blob = new Blob(recordedChunks,{type:'video/webm'});
-  const url = URL.createObjectURL(blob);
-  window.open(`playback.html?videoUrl=${encodeURIComponent(url)}`, '_blank');
-});
+function playWithEffects(url) {
+  videoEl.srcObject = null;
+  videoEl.src = url;
+  videoEl.loop = true;
+  videoEl.muted = false;
+  videoEl.play();
+
+  // alterna slow/fast
+  setInterval(() => {
+    videoEl.playbackRate = videoEl.playbackRate === 0.5 ? 2 : 0.5;
+  }, 4000);
+
+  // zoom orgânico
+  let scale = 1, dir = 1;
+  const speed = 0.0008;
+  function zoom() {
+    scale += dir * speed;
+    if (scale > 1.6) dir = -1;
+    if (scale < 1) dir = 1;
+    videoEl.style.transform = `scale(${scale})`;
+    requestAnimationFrame(zoom);
+  }
+  zoom();
+}
 </script>
 
 </body>
