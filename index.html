@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gravação + Zoom + Slow Avançado</title>
+<title>Gravação + Zoom + Slow Local</title>
 <style>
 body { background:black; color:white; font-family:Arial; text-align:center; margin:0; padding:0; }
 h1 { color:gold; }
@@ -15,12 +15,13 @@ button { background:gold; color:black; padding:10px 20px; border:none; border-ra
 </head>
 <body>
 
-<h1>🎥 Gravação + Zoom + Slow Avançado</h1>
+<h1>🎥 Gravação + Zoom + Slow Local</h1>
 <div class="video-wrapper">
   <video id="camera" autoplay muted playsinline></video>
 </div>
 <br>
 <button id="startBtn">▶️ Gravar 10s</button>
+
 <h2>🎬 Gravação Final</h2>
 <div class="video-wrapper">
   <video id="finalVideo" controls autoplay loop playsinline></video>
@@ -29,53 +30,49 @@ button { background:gold; color:black; padding:10px 20px; border:none; border-ra
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
-const CLOUD_NAME = "dxobnhynf";
-const UPLOAD_PRESET = "ml_default";
 const cameraVideo = document.getElementById("camera");
 const finalVideo = document.getElementById("finalVideo");
-let mediaRecorder, recordedChunks = [], stream;
+let mediaRecorder, recordedChunks=[], stream;
 
 // Inicia câmera traseira
-async function startCamera() {
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } }, audio: false });
-  } catch(e) {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+async function startCamera(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:"environment"}}, audio:false});
+  }catch(e){
+    stream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
   }
   cameraVideo.srcObject = stream;
 }
 startCamera();
 
-document.getElementById("startBtn").addEventListener("click", async () => {
-  recordedChunks = [];
+document.getElementById("startBtn").addEventListener("click", ()=>{
+  recordedChunks=[];
   mediaRecorder = new MediaRecorder(stream);
-
-  mediaRecorder.ondataavailable = e => { if(e.data.size>0) recordedChunks.push(e.data); };
+  mediaRecorder.ondataavailable = e=>{ if(e.data.size>0) recordedChunks.push(e.data); };
   
-  mediaRecorder.onstop = async () => {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+  mediaRecorder.onstop = ()=>{
+    const blob = new Blob(recordedChunks,{type:'video/webm'});
     const url = URL.createObjectURL(blob);
 
-    // Mostra gravação final
+    // Exibe vídeo final
     finalVideo.src = url;
     finalVideo.play();
 
-    // Slow/fast avançado
-    let timeline = [
+    // Slow + Fast simulado
+    const timeline=[
       {rate:1, duration:1},
-      {rate:0.33, duration:2},  // 2s -> 6s
-      {rate:2, duration:1},     // 1s -> 0.5s
-      {rate:0.43, duration:1.5} // 1.5s -> 3.5s
+      {rate:0.33, duration:2},
+      {rate:2, duration:1},
+      {rate:0.43, duration:1.5}
     ];
     let idx=0, elapsed=0;
-    function advanceSlow() {
-      if(finalVideo.paused) return;
-      if(idx>=timeline.length) { idx=0; elapsed=0; }
+    function advanceSlow(){
+      if(finalVideo.paused){ requestAnimationFrame(advanceSlow); return; }
       finalVideo.playbackRate = timeline[idx].rate;
       elapsed += 0.05;
-      if(elapsed >= timeline[idx].duration){
-        idx++;
-        elapsed=0;
+      if(elapsed>=timeline[idx].duration){
+        idx++; elapsed=0;
+        if(idx>=timeline.length) idx=0;
       }
       requestAnimationFrame(advanceSlow);
     }
@@ -94,28 +91,14 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     }
     zoom();
 
-    // Upload para Cloudinary
-    try{
-      const file = new File([blob], "video.webm", { type:'video/webm' });
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("upload_preset", UPLOAD_PRESET);
-
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, { method:"POST", body:formData });
-      const data = await res.json();
-
-      if(data.secure_url){
-        document.getElementById("qrcode").innerHTML = "";
-        new QRCode(document.getElementById("qrcode"), data.secure_url);
-      }
-    } catch(err){
-      console.error("Erro no upload:", err);
-    }
+    // QR Code local
+    document.getElementById("qrcode").innerHTML="";
+    new QRCode(document.getElementById("qrcode"), url);
   };
 
   mediaRecorder.start();
 
-  // Zoom orgânico na câmera durante gravação
+  // Zoom na câmera
   let camScale=1, camDir=1;
   const zoomInterval = setInterval(()=>{
     camScale += camDir*0.01;
@@ -124,7 +107,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     cameraVideo.style.transform=`scale(${camScale})`;
   },50);
 
-  // Para gravação após 10s
   setTimeout(()=>{
     mediaRecorder.stop();
     clearInterval(zoomInterval);
