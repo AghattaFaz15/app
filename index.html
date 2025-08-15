@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gravação + Zoom + Slow Local</title>
+<title>Gravação + Zoom + Slow Real</title>
 <style>
 body { background:black; color:white; font-family:Arial; text-align:center; margin:0; padding:0; }
 h1 { color:gold; }
@@ -15,20 +15,21 @@ button { background:gold; color:black; padding:10px 20px; border:none; border-ra
 </head>
 <body>
 
-<h1>🎥 Gravação + Zoom + Slow Local</h1>
+<h1>🎥 Gravação + Zoom + Slow Real</h1>
 <div class="video-wrapper">
   <video id="camera" autoplay muted playsinline></video>
 </div>
 <br>
 <button id="startBtn">▶️ Gravar 10s</button>
 
-<h2>🎬 Gravação Final</h2>
+<h2>🎬 Vídeo Final</h2>
 <div class="video-wrapper">
-  <video id="finalVideo" controls autoplay loop playsinline></video>
+  <video id="finalVideo" controls playsinline></video>
 </div>
 <div id="qrcode"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.8/dist/ffmpeg.min.js"></script>
 <script>
 const cameraVideo = document.getElementById("camera");
 const finalVideo = document.getElementById("finalVideo");
@@ -45,60 +46,48 @@ async function startCamera(){
 }
 startCamera();
 
-document.getElementById("startBtn").addEventListener("click", ()=>{
+document.getElementById("startBtn").addEventListener("click", async ()=>{
   recordedChunks=[];
   mediaRecorder = new MediaRecorder(stream);
   mediaRecorder.ondataavailable = e=>{ if(e.data.size>0) recordedChunks.push(e.data); };
-  
-  mediaRecorder.onstop = ()=>{
-    const blob = new Blob(recordedChunks,{type:'video/webm'});
-    const url = URL.createObjectURL(blob);
 
-    // Exibe vídeo final
+  mediaRecorder.onstop = async ()=>{
+    const blob = new Blob(recordedChunks,{type:'video/webm'});
+    const arrayBuffer = await blob.arrayBuffer();
+    
+    // Inicializa ffmpeg
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log:true });
+    await ffmpeg.load();
+    
+    // Grava input
+    ffmpeg.FS('writeFile','input.webm', new Uint8Array(arrayBuffer));
+    
+    // Aplica zoom e slow motion real: dobra duração de 10s para 20s
+    // Zoom simples linear: scale=1->1.6
+    await ffmpeg.run(
+      '-i','input.webm',
+      '-filter_complex',
+      "[0:v]setpts=2*PTS,zoompan=z='if(lte(on,50),1.0,1.6)':d=1:x='iw/4':y='ih/4',fps=30,format=yuv420p[v]",
+      '-map','[v]',
+      '-an',
+      'output.mp4'
+    );
+
+    const data = ffmpeg.FS('readFile','output.mp4');
+    const url = URL.createObjectURL(new Blob([data.buffer],{type:'video/mp4'}));
+    
     finalVideo.src = url;
     finalVideo.play();
 
-    // Slow + Fast simulado
-    const timeline=[
-      {rate:1, duration:1},
-      {rate:0.33, duration:2},
-      {rate:2, duration:1},
-      {rate:0.43, duration:1.5}
-    ];
-    let idx=0, elapsed=0;
-    function advanceSlow(){
-      if(finalVideo.paused){ requestAnimationFrame(advanceSlow); return; }
-      finalVideo.playbackRate = timeline[idx].rate;
-      elapsed += 0.05;
-      if(elapsed>=timeline[idx].duration){
-        idx++; elapsed=0;
-        if(idx>=timeline.length) idx=0;
-      }
-      requestAnimationFrame(advanceSlow);
-    }
-    advanceSlow();
-
-    // Zoom orgânico só quando tocando
-    let scale=1, dir=1;
-    function zoom(){
-      if(!finalVideo.paused){
-        scale += dir*0.0008;
-        if(scale>=1.6) dir=-1;
-        if(scale<=1) dir=1;
-        finalVideo.style.transform=`scale(${scale})`;
-      }
-      requestAnimationFrame(zoom);
-    }
-    zoom();
-
-    // QR Code local
+    // QR Code do download
     document.getElementById("qrcode").innerHTML="";
     new QRCode(document.getElementById("qrcode"), url);
   };
 
   mediaRecorder.start();
 
-  // Zoom na câmera
+  // Zoom na câmera ao vivo
   let camScale=1, camDir=1;
   const zoomInterval = setInterval(()=>{
     camScale += camDir*0.01;
