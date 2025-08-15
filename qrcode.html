@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Code Automático do Vídeo</title>
+<style>
+body { background:black; color:white; font-family:Arial; text-align:center; padding:20px; }
+h1 { color:gold; }
+#qrcode { margin-top:20px; }
+.video-wrapper { width:100%; max-width:500px; margin:20px auto; border:2px solid gold; border-radius:10px; overflow:hidden; display:none; }
+video { width:100%; display:block; }
+</style>
+</head>
+<body>
+
+<h1>📱 QR Code Automático do Vídeo</h1>
+
+<div id="qrcode"></div>
+
+<div class="video-wrapper" id="videoWrapper">
+  <video id="videoPlayer" controls></video>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const CLOUD_NAME = "dxobnhynf";
+const UPLOAD_PRESET = "ml_default";
+
+// Simula o Blob do vídeo gravado (substitua isso pelo seu blob real)
+async function fetchVideoBlob() {
+  // Aqui você poderia pegar do localStorage, IndexedDB ou passado do outro HTML
+  // Exemplo: fetch do blob local (para testes)
+  const res = await fetch("video.webm"); // substitua pelo seu vídeo real
+  const blob = await res.blob();
+  return blob;
+}
+
+async function uploadAndGenerateQR() {
+  const blob = await fetchVideoBlob();
+  const file = new File([blob], "video.webm", { type: "video/webm" });
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", UPLOAD_PRESET);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, {
+    method: "POST",
+    body: formData
+  });
+  const data = await res.json();
+  const videoUrl = data.secure_url;
+
+  // Gera QR Code
+  document.getElementById("qrcode").innerHTML = "";
+  new QRCode(document.getElementById("qrcode"), {
+    text: videoUrl,
+    width: 200,
+    height: 200,
+    colorDark: "#000000",
+    colorLight: "#ffffff",
+    correctLevel: QRCode.CorrectLevel.H
+  });
+
+  // Mostra vídeo
+  const videoWrapper = document.getElementById("videoWrapper");
+  const videoPlayer = document.getElementById("videoPlayer");
+  videoWrapper.style.display = "block";
+  videoPlayer.src = videoUrl;
+  videoPlayer.play();
+}
+
+// Chama função automaticamente
+uploadAndGenerateQR();
+</script>
+
+</body>
+</html>
