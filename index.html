@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gravação + Slow + Zoom + QR</title>
+<title>Gravação + Zoom + Slow Cloudinary</title>
 <style>
 body { background:black; color:white; font-family:Arial; text-align:center; margin:0; padding:0; }
 h1 { color:gold; }
@@ -15,16 +15,14 @@ button { background:gold; color:black; padding:10px 20px; border:none; border-ra
 </head>
 <body>
 
-<h1>🎥 Gravação + Zoom + Slow Motion</h1>
-
+<h1>🎥 Gravação + Zoom + Slow Real</h1>
 <div class="video-wrapper">
   <video id="camera" autoplay muted playsinline></video>
 </div>
-
 <br>
 <button id="startBtn">▶️ Gravar 10s</button>
 
-<h2>🎬 Gravação Final</h2>
+<h2>🎬 Vídeo Final</h2>
 <div class="video-wrapper">
   <video id="finalVideo" controls></video>
 </div>
@@ -44,7 +42,6 @@ async function startCamera() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } }, audio: false });
   } catch(e){
-    // fallback para frontal
     stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
   }
   cameraVideo.srcObject = stream;
@@ -59,40 +56,28 @@ document.getElementById("startBtn").addEventListener("click", async () => {
   
   mediaRecorder.onstop = async () => {
     const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    const url = URL.createObjectURL(blob);
-
-    // Mostra gravação final imediatamente
-    finalVideo.src = url;
-    finalVideo.loop = true;
-    finalVideo.play();
-
-    // Slow/Fast alternando
-    finalVideo.playbackRate = 0.5;
-    setInterval(()=>{ finalVideo.playbackRate = finalVideo.playbackRate===0.5?2:0.5; }, 4000);
-
-    // Zoom orgânico no vídeo final
-    let scale = 1, dir = 1;
-    function zoom() {
-      scale += dir*0.0008;
-      if(scale>=1.6) dir=-1;
-      if(scale<=1) dir=1;
-      finalVideo.style.transform = `scale(${scale})`;
-      requestAnimationFrame(zoom);
-    }
-    zoom();
-
-    // Upload para Cloudinary
     const file = new File([blob], "video.webm", { type: 'video/webm' });
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", UPLOAD_PRESET);
 
+    // Upload para Cloudinary
     try{
       const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, { method:"POST", body:formData });
       const data = await res.json();
+
+      // Gera link transformado: slow + zoom
+      const transformedUrl = `https://res.cloudinary.com/${CLOUD_NAME}/video/upload/e_slowmotion:2,c_fill,g_auto,h_720,w_1280/${data.public_id}.webm`;
+
+      // Mostra player final
+      finalVideo.src = transformedUrl;
+      finalVideo.loop = true;
+      finalVideo.play();
+
       // QR Code
       document.getElementById("qrcode").innerHTML = "";
-      new QRCode(document.getElementById("qrcode"), data.secure_url);
+      new QRCode(document.getElementById("qrcode"), transformedUrl);
+
     } catch(err){
       console.error("Erro upload:", err);
     }
