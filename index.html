@@ -1,274 +1,162 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>10s → 20s (Zoom orgânico + Slow alternado + QR)</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gravação + Zoom + Slow + QR</title>
 <style>
-  :root { --gold:#ffd700; }
-  body{margin:0;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;text-align:center}
-  h1{color:var(--gold);margin:16px 0}
+  body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center}
+  h1{color:#ffd700;margin:16px 0}
   .wrap{width:100%;max-width:520px;margin:16px auto;padding:0 12px}
-  .frame{border:2px solid var(--gold);border-radius:12px;overflow:hidden}
-  video{width:100%;display:block;transform-origin:center center}
+  .frame{border:2px solid #ffd700;border-radius:12px;overflow:hidden}
+  video, canvas{width:100%;display:block;transform-origin:center center}
   .row{margin:12px 0}
-  button{background:var(--gold);color:#000;border:0;border-radius:8px;padding:10px 14px;font-size:16px;cursor:pointer;margin:6px}
-  button[disabled]{opacity:.6;cursor:not-allowed}
+  button{background:#ffd700;color:#000;border:0;border-radius:8px;padding:10px 14px;font-size:16px;cursor:pointer;margin:6px}
   #qrcode{margin:16px auto}
-  .status{font-size:.95rem;margin:8px auto;opacity:.9;min-height:1.4em}
-  .hint{opacity:.8;font-size:.85rem}
+  .status{font-size:.9rem;margin:8px auto;opacity:.9}
 </style>
 </head>
 <body>
-  <h1>🎥 10s → 20s (Zoom orgânico + Slow alternado + QR)</h1>
-
-  <div class="wrap">
-    <div class="frame"><video id="live" autoplay muted playsinline></video></div>
-    <div class="row">
-      <button id="btnStart">▶️ Gravar 10s</button>
-    </div>
-    <div class="status" id="status"></div>
-
-    <h3>📽️ Playback</h3>
-    <div class="frame"><video id="out" controls></video></div>
-    <div class="hint">Se pausar o player, o zoom do playback pausa junto.</div>
-
-    <div id="qrcode"></div>
+<h1>🎥 Gravação + Zoom + Slow + QR</h1>
+<div class="wrap">
+  <div class="frame"><video id="live" autoplay muted playsinline></video></div>
+  <div class="row">
+    <button id="btnStart">▶️ Gravar 10s</button>
   </div>
+  <div class="status" id="status"></div>
+  <h3>📽️ Playback</h3>
+  <div class="frame"><video id="playback" controls></video></div>
+  <div id="qrcode"></div>
+</div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script>
-  // ====== Cloudinary ======
-  const CLOUD_NAME = "dxobnhynf";
-  const UPLOAD_PRESET = "Plataforma_360";
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const CLOUD_NAME = "dxobnhynf";
+const UPLOAD_PRESET = "Plataforma_360";
 
-  // ====== DOM ======
-  const vLive = document.getElementById('live');
-  const vOut  = document.getElementById('out');
-  const btn   = document.getElementById('btnStart');
-  const st    = document.getElementById('status');
-  const qrBox = document.getElementById('qrcode');
+const vLive = document.getElementById('live');
+const vOut  = document.getElementById('playback');
+const btnStart = document.getElementById('btnStart');
+const statusEl = document.getElementById('status');
+const qrBox    = document.getElementById('qrcode');
 
-  // ====== Estado ======
-  let stream, rec, chunks = [];
-  let liveZoomTimer = null;
-  let rafZoomOut = null;
-  let liveTrack = null;
-  let supportsZoom = false;
+let stream, mediaRecorder, chunks = [];
+let zoomTimer = null;
 
-  const setStatus = (t)=> st.textContent = t || "";
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const setStatus = msg => statusEl.textContent = msg ?? "";
 
-  // Inicia câmera traseira e detecta suporte a zoom ótico
-  async function initCamera(){
-    try{
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { exact: "environment" } }, audio: false
-      });
-    }catch(e){
-      stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
-    }
-    vLive.srcObject = stream;
-    liveTrack = stream.getVideoTracks()[0];
-
-    try{
-      const caps = liveTrack.getCapabilities ? liveTrack.getCapabilities() : {};
-      supportsZoom = typeof caps.zoom === 'number' || (caps.zoom && (typeof caps.zoom.min === 'number'));
-    }catch(_){
-      supportsZoom = false;
-    }
+async function startCamera(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:"environment"}}, audio:false});
+  }catch(e){
+    stream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
   }
+  vLive.srcObject = stream;
+}
 
-  // Zoom orgânico no preview (gravado no arquivo) usando applyConstraints({zoom})
-  function startLiveZoom(){
-    stopLiveZoom();
+function startLiveZoom(){
+  let scale=1, dir=1;
+  zoomTimer = setInterval(()=>{
+    scale += dir*0.012;
+    if(scale>=1.6) dir=-1;
+    if(scale<=1) dir=1;
+    vLive.style.transform = `scale(${scale})`;
+  },50);
+}
 
-    if(!liveTrack){ return; }
+function stopLiveZoom(){
+  if(zoomTimer){ clearInterval(zoomTimer); zoomTimer=null;}
+  vLive.style.transform='scale(1)';
+}
 
-    let min=1, max=3; // valores padrão caso caps não tragam faixa
-    try{
-      const caps = liveTrack.getCapabilities?.() || {};
-      if(caps.zoom){
-        if(typeof caps.zoom === 'number'){
-          min = 1; max = caps.zoom; // raro, mas ok
-        }else{
-          min = Math.max(1, caps.zoom.min || 1);
-          max = Math.max(min+0.1, caps.zoom.max || 3);
-        }
-      }
-    }catch(_){}
+// Upload para Cloudinary
+async function uploadToCloud(blob){
+  const file = new File([blob],"video.webm",{type:'video/webm'});
+  const fd = new FormData();
+  fd.append("file",file);
+  fd.append("upload_preset",UPLOAD_PRESET);
 
-    let z = (min+max)/2; // começa no meio
-    let dir = 1;
-    const step = Math.max( (max-min) * 0.015, 0.05 ); // passo proporcional
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, {method:"POST", body:fd});
+  if(!res.ok) throw new Error("Upload falhou");
+  return res.json();
+}
 
-    liveZoomTimer = setInterval(async ()=>{
-      // oscila entre min e max
-      z += dir*step;
-      if(z >= max) { z = max; dir = -1; }
-      if(z <= min) { z = min; dir =  1; }
+// Gera QR
+function makeQR(url){
+  qrBox.innerHTML="";
+  new QRCode(qrBox,{text:url,width:220,height:220,correctLevel:QRCode.CorrectLevel.H});
+}
 
-      try{
-        await liveTrack.applyConstraints({ advanced:[{ zoom: z }] });
-      }catch(e){
-        // Se der erro, paramos o zoom orgânico (não forçamos fallback por padrão)
-        clearInterval(liveZoomTimer); liveZoomTimer = null;
-        console.warn("Zoom orgânico não suportado / falhou:", e);
-        // ===== Fallback opcional (DESLIGADO por padrão) =====
-        // vLive.style.transform = `scale(${Math.max(1, z)})`;
-      }
-    }, 80);
-  }
-  function stopLiveZoom(){
-    if(liveZoomTimer){ clearInterval(liveZoomTimer); liveZoomTimer = null; }
-    // Se usou fallback CSS, descomente a linha abaixo:
-    // vLive.style.transform = 'scale(1)';
-    try{
-      // volta zoom para 1x no fim
-      if(liveTrack && liveTrack.applyConstraints) {
-        liveTrack.applyConstraints({ advanced:[{ zoom: 1 }] }).catch(()=>{});
-      }
-    }catch(_){}
-  }
+// Grava 10s
+async function record10s(){
+  chunks=[];
+  mediaRecorder = new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp8'});
+  mediaRecorder.ondataavailable = e=>{ if(e.data.size) chunks.push(e.data); };
 
-  // Zoom orgânico no playback (efeito visual, pausa junto)
-  function startOutZoom(){
-    cancelOutZoom();
-    let s=1, dir=1;
-    const step = ()=>{
-      if(!vOut.paused){
-        s += dir*0.0009;
-        if(s>=1.7) dir=-1;
-        if(s<=1.0) dir=1;
-        vOut.style.transform = `scale(${s})`;
-      }
-      rafZoomOut = requestAnimationFrame(step);
+  return new Promise(async resolve=>{
+    mediaRecorder.onstop = async ()=>{
+      await sleep(50);
+      const blob = new Blob(chunks,{type:'video/webm'});
+      resolve(blob);
     };
-    rafZoomOut = requestAnimationFrame(step);
-  }
-  function cancelOutZoom(){
-    if(rafZoomOut){ cancelAnimationFrame(rafZoomOut); rafZoomOut=null; }
-    vOut.style.transform = 'scale(1)';
-  }
+    mediaRecorder.start(250); // chunks de 250ms
+    await sleep(10300);
+    try{ mediaRecorder.requestData(); }catch(_){}
+    mediaRecorder.stop();
+  });
+}
 
-  // Grava 10s "cheios" (evita cair para 9.x)
-  async function record10s(){
-    chunks = [];
-    rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
-    rec.ondataavailable = (e)=>{ if(e.data && e.data.size) chunks.push(e.data); };
+// Slow alternado
+function startAltSlow(video){
+  let i=0;
+  const pattern = [0.5,2,0.5,2]; // alterna velocidade
+  const interval = 4000;
+  const step = ()=>{
+    if(video.paused) return;
+    video.playbackRate = pattern[i%pattern.length];
+    i++;
+    setTimeout(step, interval);
+  };
+  step();
+}
 
-    return new Promise(async (resolve)=>{
-      rec.onstop = async ()=>{
-        await sleep(50); // garante último chunk em alguns browsers
-        const blob = new Blob(chunks, { type:'video/webm' });
-        resolve(blob);
-      };
-      rec.start(250);           // timeslice para flush periódico
-      await sleep(10300);       // 10s + folguinha
-      try{ rec.requestData(); }catch(_){}
-      rec.stop();
-    });
-  }
+btnStart.addEventListener('click', async ()=>{
+  btnStart.disabled=true;
+  setStatus("🎬 Gravando 10s…");
+  startLiveZoom();
 
-  // Upload para Cloudinary
-  async function uploadToCloud(blob){
-    const fd = new FormData();
-    fd.append("file", new File([blob], "video.webm", { type:'video/webm' }));
-    fd.append("upload_preset", UPLOAD_PRESET);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, { method:"POST", body:fd });
-    if(!res.ok){
-      const txt = await res.text().catch(()=>"(sem body)");
-      throw new Error("Upload falhou: " + res.status + " " + txt);
+  const blob = await record10s();
+
+  stopLiveZoom();
+  try{ stream.getTracks().forEach(t=>t.stop()); }catch(_){}
+  vLive.srcObject=null;
+
+  // playback
+  const localURL = URL.createObjectURL(blob);
+  vOut.src = localURL;
+  vOut.loop = true;
+  await vOut.play().catch(()=>{});
+  startAltSlow(vOut);
+
+  setStatus("⬆️ Enviando para Cloud…");
+  try{
+    const data = await uploadToCloud(blob);
+    if(data.secure_url){
+      makeQR(data.secure_url);
+      setStatus("✅ Upload concluído. QR gerado.");
+    }else{
+      makeQR(localURL);
+      setStatus("⚠️ Sem URL do Cloud, QR local gerado.");
     }
-    return res.json();
+  }catch(err){
+    console.error(err);
+    makeQR(localURL);
+    setStatus("⚠️ Upload falhou, QR local gerado.");
   }
+});
 
-  // Gera QR
-  function makeQR(url){
-    qrBox.innerHTML = "";
-    new QRCode(qrBox, { text:url, width:220, height:220, correctLevel: QRCode.CorrectLevel.H });
-  }
-
-  // Controlador de velocidade que garante 20s exatos com padrão alternado
-  // Ideia: dividimos os 10s de origem em 4 trechos (w1..w4) e aplicamos rates [1, 0.5, 2, 0.25]
-  // Resolvemos w's para: w1+w2+w3+w4 = 10  e  w1/1 + w2/0.5 + w3/2 + w4/0.25 = 20
-  // Uma solução positiva é:
-  //   w1 = 1.9047619, w2 = 3.8095238, w3 = 1.9047619, w4 = 2.3809524  (segundos de ORIGEM)
-  // Isso dá 20s de reprodução exatos mantendo o padrão normal → lento → rápido → muito lento.
-  function installExact20AltController(){
-    const D = vOut.duration || 10; // duração de origem (≈10s)
-    const W1 = 1.9047619, W2 = 3.8095238, W3 = 1.9047619, W4 = 2.3809524;
-    const sumW = W1+W2+W3+W4; // 10
-    // escala para a duração real gravada (se der 10.1s, por ex.)
-    const k = D / sumW;
-    const c1 = W1*k;              // corte 1 em tempo de origem
-    const c2 = c1 + W2*k;         // corte 2
-    const c3 = c2 + W3*k;         // corte 3
-    const c4 = c3 + W4*k;         // deve dar ~D
-
-    function applyRate(){
-      const t = vOut.currentTime; // tempo de origem
-      let rate = 1.0;
-      if (t < c1) rate = 1.0;           // normal
-      else if (t < c2) rate = 0.5;      // slow
-      else if (t < c3) rate = 2.0;      // fast
-      else rate = 0.25;                 // super slow
-      if (vOut.playbackRate !== rate) vOut.playbackRate = rate;
-    }
-
-    vOut.addEventListener('timeupdate', applyRate);
-    // aplicar já no início
-    applyRate();
-  }
-
-  async function flow(){
-    btn.disabled = true;
-    setStatus("🎬 Iniciando câmera…");
-    await initCamera();
-
-    setStatus(supportsZoom ? "🔍 Zoom orgânico ativo." : "ℹ️ Seu dispositivo pode não suportar zoom óptico.");
-    startLiveZoom();
-
-    setStatus("🎥 Gravando 10s…");
-    const blob = await record10s();
-
-    // encerra câmera/preview
-    stopLiveZoom();
-    try{ stream.getTracks().forEach(t=>t.stop()); }catch(_){}
-    vLive.srcObject = null;
-
-    // playback local + controlador de velocidade
-    const urlLocal = URL.createObjectURL(blob);
-    vOut.src = urlLocal;
-    vOut.loop = false; // vamos tocar uma vez até o fim (20s de reprodução)
-    await vOut.play().catch(()=>{});
-    startOutZoom();
-    // instala controlador para alternar as velocidades e totalizar 20s
-    vOut.addEventListener('loadedmetadata', installExact20AltController, { once:true });
-    if (vOut.readyState >= 1) { installExact20AltController(); }
-
-    setStatus("☁️ Enviando ao Cloud…");
-    try{
-      const data = await uploadToCloud(blob);
-      if(data && data.secure_url){
-        makeQR(data.secure_url);
-        setStatus("✅ Upload concluído. QR gerado.");
-      }else{
-        makeQR(urlLocal);
-        setStatus("⚠️ Cloud sem URL. QR local gerado.");
-      }
-    }catch(err){
-      console.error(err);
-      makeQR(urlLocal);
-      setStatus("⚠️ Upload falhou. QR do vídeo local gerado.");
-    }
-  }
-
-  // Controle de pausa para zoom no playback
-  vOut.addEventListener('pause', ()=>{/* o loop já respeita paused */});
-  vOut.addEventListener('ended', ()=>{ cancelOutZoom(); });
-
-  btn.addEventListener('click', flow);
-  </script>
+startCamera();
+</script>
 </body>
 </html>
