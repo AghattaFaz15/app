@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Playback Zoom + Slow</title>
+<title>Gravação + Slow + Zoom</title>
 <style>
 body { background:black; color:white; font-family:Arial; text-align:center; margin:0; padding:0; }
 h1 { color:gold; }
@@ -21,6 +21,10 @@ button { background:gold; color:black; padding:10px 20px; border:none; border-ra
 </div>
 <br>
 <button id="startBtn">▶️ Gravar 10s</button>
+<h2>🎬 Gravação Final</h2>
+<div class="video-wrapper">
+  <video id="finalVideo" controls></video>
+</div>
 <div id="qrcode"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -28,9 +32,10 @@ button { background:gold; color:black; padding:10px 20px; border:none; border-ra
 const CLOUD_NAME = "dxobnhynf";
 const UPLOAD_PRESET = "ml_default"; // seu preset
 const cameraVideo = document.getElementById("camera");
+const finalVideo = document.getElementById("finalVideo");
 let mediaRecorder, recordedChunks = [], stream, zoomInterval;
 
-// Abre a câmera traseira se possível
+// Inicia câmera traseira
 async function startCamera() {
   stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } }, audio: false });
   cameraVideo.srcObject = stream;
@@ -44,8 +49,27 @@ document.getElementById("startBtn").addEventListener("click", async () => {
   mediaRecorder.ondataavailable = e => { if(e.data.size>0) recordedChunks.push(e.data); };
   
   mediaRecorder.onstop = async () => {
-    // Cria blob do vídeo gravado
+    // Cria blob do vídeo
     const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+
+    // Exibe imediatamente a gravação final
+    finalVideo.src = url;
+    finalVideo.loop = true;
+    finalVideo.play();
+
+    // Slow/Fast e Zoom no vídeo final
+    let scale = 1, dir = 1;
+    finalVideo.playbackRate = 0.5;
+    setInterval(()=>{ finalVideo.playbackRate = finalVideo.playbackRate===0.5?2:0.5; }, 4000);
+    function zoom() {
+      scale += dir*0.0008;
+      if(scale>=1.6) dir=-1;
+      if(scale<=1) dir=1;
+      finalVideo.style.transform = `scale(${scale})`;
+      requestAnimationFrame(zoom);
+    }
+    zoom();
 
     // Upload para Cloudinary
     const file = new File([blob], "video.webm", { type: 'video/webm' });
@@ -55,18 +79,14 @@ document.getElementById("startBtn").addEventListener("click", async () => {
 
     const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, { method:"POST", body:formData });
     const data = await res.json();
-    const videoUrl = data.secure_url;
 
-    // Mostra QR Code
+    // Mostra QR Code do vídeo final
     document.getElementById("qrcode").innerHTML = "";
-    new QRCode(document.getElementById("qrcode"), videoUrl);
-
-    // Reproduzir com slow + zoom
-    playVideoEffects(videoUrl);
+    new QRCode(document.getElementById("qrcode"), data.secure_url);
   };
 
   mediaRecorder.start();
-  
+
   // Zoom orgânico durante a gravação
   let scale = 1, dir = 1;
   zoomInterval = setInterval(() => {
@@ -84,31 +104,6 @@ document.getElementById("startBtn").addEventListener("click", async () => {
     cameraVideo.style.transform = "scale(1)";
   }, 10000);
 });
-
-function playVideoEffects(url) {
-  cameraVideo.srcObject = null;
-  cameraVideo.src = url;
-  cameraVideo.loop = true;
-  cameraVideo.muted = false;
-  cameraVideo.playbackRate = 0.5; // faz 10s virar 20s
-  cameraVideo.play();
-
-  // alterna velocidade a cada 4s
-  setInterval(()=>{
-    cameraVideo.playbackRate = cameraVideo.playbackRate===0.5 ? 2 : 0.5;
-  },4000);
-
-  // zoom orgânico no vídeo final
-  let scale = 1, dir = 1;
-  function zoom() {
-    scale += dir*0.0008;
-    if(scale>=1.6) dir=-1;
-    if(scale<=1) dir=1;
-    cameraVideo.style.transform = `scale(${scale})`;
-    requestAnimationFrame(zoom);
-  }
-  zoom();
-}
 </script>
 
 </body>
