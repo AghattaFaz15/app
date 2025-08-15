@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Gravação + Zoom + Slow + QR</title>
+<title>10s → 20s (Zoom orgânico + Slow alternado + QR)</title>
 <style>
   :root { --gold:#ffd700; }
   body{margin:0;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;text-align:center}
@@ -15,56 +15,52 @@
   button{background:var(--gold);color:#000;border:0;border-radius:8px;padding:10px 14px;font-size:16px;cursor:pointer;margin:6px}
   button[disabled]{opacity:.6;cursor:not-allowed}
   #qrcode{margin:16px auto}
-  .hint{opacity:.8;font-size:.9rem;margin-top:6px}
-  .status{font-size:.9rem;margin:8px auto;opacity:.9}
+  .status{font-size:.95rem;margin:8px auto;opacity:.9;min-height:1.4em}
+  .hint{opacity:.8;font-size:.85rem}
 </style>
 </head>
 <body>
-  <h1>🎥 Gravar + Slow + Zoom + QR</h1>
+  <h1>🎥 10s → 20s (Zoom orgânico + Slow alternado + QR)</h1>
 
   <div class="wrap">
     <div class="frame"><video id="live" autoplay muted playsinline></video></div>
     <div class="row">
       <button id="btnStart">▶️ Gravar 10s</button>
-      <button id="btnAlt" disabled>🔁 Slow Alternado</button>
-      <button id="btnExact" disabled>⏱️ Slow 20s Exatos</button>
     </div>
     <div class="status" id="status"></div>
 
     <h3>📽️ Playback</h3>
-    <div class="frame"><video id="playback" controls></video></div>
-    <div class="hint">Pausou o player? o zoom pausa junto.</div>
+    <div class="frame"><video id="out" controls></video></div>
+    <div class="hint">Se pausar o player, o zoom do playback pausa junto.</div>
 
     <div id="qrcode"></div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
-  // ====== Config Cloudinary ======
+  // ====== Cloudinary ======
   const CLOUD_NAME = "dxobnhynf";
-  const UPLOAD_PRESET = "ml_default";
+  const UPLOAD_PRESET = "Plataforma_360";
 
   // ====== DOM ======
   const vLive = document.getElementById('live');
-  const vOut  = document.getElementById('playback');
-  const btnStart = document.getElementById('btnStart');
-  const btnAlt   = document.getElementById('btnAlt');
-  const btnExact = document.getElementById('btnExact');
-  const statusEl = document.getElementById('status');
-  const qrBox    = document.getElementById('qrcode');
+  const vOut  = document.getElementById('out');
+  const btn   = document.getElementById('btnStart');
+  const st    = document.getElementById('status');
+  const qrBox = document.getElementById('qrcode');
 
   // ====== Estado ======
   let stream, rec, chunks = [];
-  let zoomTimerLive = null;
+  let liveZoomTimer = null;
   let rafZoomOut = null;
-  let altTimer = null;
+  let liveTrack = null;
+  let supportsZoom = false;
 
-  // ====== Helpers ======
-  const setStatus = (msg) => statusEl.textContent = msg ?? "";
+  const setStatus = (t)=> st.textContent = t || "";
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-  // Inicia câmera traseira com fallback
-  async function startCamera(){
+  // Inicia câmera traseira e detecta suporte a zoom ótico
+  async function initCamera(){
     try{
       stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { exact: "environment" } }, audio: false
@@ -73,25 +69,69 @@
       stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
     }
     vLive.srcObject = stream;
+    liveTrack = stream.getVideoTracks()[0];
+
+    try{
+      const caps = liveTrack.getCapabilities ? liveTrack.getCapabilities() : {};
+      supportsZoom = typeof caps.zoom === 'number' || (caps.zoom && (typeof caps.zoom.min === 'number'));
+    }catch(_){
+      supportsZoom = false;
+    }
   }
 
-  // Zoom orgânico no preview (gravação)
+  // Zoom orgânico no preview (gravado no arquivo) usando applyConstraints({zoom})
   function startLiveZoom(){
-    let s=1, dir=1;
-    stopLiveZoom(); // garante único
-    zoomTimerLive = setInterval(()=>{
-      s += dir*0.012;               // zoom mais “vivo”
-      if(s>=1.8) dir=-1;
-      if(s<=1.0) dir=1;
-      vLive.style.transform = `scale(${s})`;
-    }, 50);
+    stopLiveZoom();
+
+    if(!liveTrack){ return; }
+
+    let min=1, max=3; // valores padrão caso caps não tragam faixa
+    try{
+      const caps = liveTrack.getCapabilities?.() || {};
+      if(caps.zoom){
+        if(typeof caps.zoom === 'number'){
+          min = 1; max = caps.zoom; // raro, mas ok
+        }else{
+          min = Math.max(1, caps.zoom.min || 1);
+          max = Math.max(min+0.1, caps.zoom.max || 3);
+        }
+      }
+    }catch(_){}
+
+    let z = (min+max)/2; // começa no meio
+    let dir = 1;
+    const step = Math.max( (max-min) * 0.015, 0.05 ); // passo proporcional
+
+    liveZoomTimer = setInterval(async ()=>{
+      // oscila entre min e max
+      z += dir*step;
+      if(z >= max) { z = max; dir = -1; }
+      if(z <= min) { z = min; dir =  1; }
+
+      try{
+        await liveTrack.applyConstraints({ advanced:[{ zoom: z }] });
+      }catch(e){
+        // Se der erro, paramos o zoom orgânico (não forçamos fallback por padrão)
+        clearInterval(liveZoomTimer); liveZoomTimer = null;
+        console.warn("Zoom orgânico não suportado / falhou:", e);
+        // ===== Fallback opcional (DESLIGADO por padrão) =====
+        // vLive.style.transform = `scale(${Math.max(1, z)})`;
+      }
+    }, 80);
   }
   function stopLiveZoom(){
-    if(zoomTimerLive){ clearInterval(zoomTimerLive); zoomTimerLive = null; }
-    vLive.style.transform = 'scale(1)';
+    if(liveZoomTimer){ clearInterval(liveZoomTimer); liveZoomTimer = null; }
+    // Se usou fallback CSS, descomente a linha abaixo:
+    // vLive.style.transform = 'scale(1)';
+    try{
+      // volta zoom para 1x no fim
+      if(liveTrack && liveTrack.applyConstraints) {
+        liveTrack.applyConstraints({ advanced:[{ zoom: 1 }] }).catch(()=>{});
+      }
+    }catch(_){}
   }
 
-  // Zoom orgânico no playback (pausa = pausa zoom)
+  // Zoom orgânico no playback (efeito visual, pausa junto)
   function startOutZoom(){
     cancelOutZoom();
     let s=1, dir=1;
@@ -107,28 +147,40 @@
     rafZoomOut = requestAnimationFrame(step);
   }
   function cancelOutZoom(){
-    if(rafZoomOut){ cancelAnimationFrame(rafZoomOut); rafZoomOut = null; }
+    if(rafZoomOut){ cancelAnimationFrame(rafZoomOut); rafZoomOut=null; }
     vOut.style.transform = 'scale(1)';
   }
 
-  // Slow alternado (efeito visual ≈ 20s, não exato)
-  function startAltSlow(){
-    stopAltSlow();
-    // alterna 4s a 0.5x (estica) e 2s a 2x (comprime) em tempo de REPRODUÇÃO
-    // isso dá um efeito orgânico e prolonga bem, mas não crava 20s.
-    vOut.playbackRate = 0.5;
-    altTimer = setInterval(()=>{
-      vOut.playbackRate = (vOut.playbackRate === 0.5) ? 2.0 : 0.5;
-    }, 4000); // troca a cada 4s de reprodução
-  }
-  function stopAltSlow(){
-    if(altTimer){ clearInterval(altTimer); altTimer = null; }
+  // Grava 10s "cheios" (evita cair para 9.x)
+  async function record10s(){
+    chunks = [];
+    rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
+    rec.ondataavailable = (e)=>{ if(e.data && e.data.size) chunks.push(e.data); };
+
+    return new Promise(async (resolve)=>{
+      rec.onstop = async ()=>{
+        await sleep(50); // garante último chunk em alguns browsers
+        const blob = new Blob(chunks, { type:'video/webm' });
+        resolve(blob);
+      };
+      rec.start(250);           // timeslice para flush periódico
+      await sleep(10300);       // 10s + folguinha
+      try{ rec.requestData(); }catch(_){}
+      rec.stop();
+    });
   }
 
-  // Slow 20s exatos (todo o clipe em 0.5x)
-  function exact20s(){
-    stopAltSlow();
-    vOut.playbackRate = 0.5; // 10s de fonte => 20s de reprodução
+  // Upload para Cloudinary
+  async function uploadToCloud(blob){
+    const fd = new FormData();
+    fd.append("file", new File([blob], "video.webm", { type:'video/webm' }));
+    fd.append("upload_preset", UPLOAD_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, { method:"POST", body:fd });
+    if(!res.ok){
+      const txt = await res.text().catch(()=>"(sem body)");
+      throw new Error("Upload falhou: " + res.status + " " + txt);
+    }
+    return res.json();
   }
 
   // Gera QR
@@ -137,105 +189,86 @@
     new QRCode(qrBox, { text:url, width:220, height:220, correctLevel: QRCode.CorrectLevel.H });
   }
 
-  // Upload para Cloudinary
-  async function uploadToCloud(blob){
-    const file = new File([blob], "video.webm", { type:'video/webm' });
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("upload_preset", UPLOAD_PRESET);
+  // Controlador de velocidade que garante 20s exatos com padrão alternado
+  // Ideia: dividimos os 10s de origem em 4 trechos (w1..w4) e aplicamos rates [1, 0.5, 2, 0.25]
+  // Resolvemos w's para: w1+w2+w3+w4 = 10  e  w1/1 + w2/0.5 + w3/2 + w4/0.25 = 20
+  // Uma solução positiva é:
+  //   w1 = 1.9047619, w2 = 3.8095238, w3 = 1.9047619, w4 = 2.3809524  (segundos de ORIGEM)
+  // Isso dá 20s de reprodução exatos mantendo o padrão normal → lento → rápido → muito lento.
+  function installExact20AltController(){
+    const D = vOut.duration || 10; // duração de origem (≈10s)
+    const W1 = 1.9047619, W2 = 3.8095238, W3 = 1.9047619, W4 = 2.3809524;
+    const sumW = W1+W2+W3+W4; // 10
+    // escala para a duração real gravada (se der 10.1s, por ex.)
+    const k = D / sumW;
+    const c1 = W1*k;              // corte 1 em tempo de origem
+    const c2 = c1 + W2*k;         // corte 2
+    const c3 = c2 + W3*k;         // corte 3
+    const c4 = c3 + W4*k;         // deve dar ~D
 
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, {
-      method:"POST", body: fd
-    });
-    if(!res.ok) throw new Error("Upload falhou");
-    return res.json();
+    function applyRate(){
+      const t = vOut.currentTime; // tempo de origem
+      let rate = 1.0;
+      if (t < c1) rate = 1.0;           // normal
+      else if (t < c2) rate = 0.5;      // slow
+      else if (t < c3) rate = 2.0;      // fast
+      else rate = 0.25;                 // super slow
+      if (vOut.playbackRate !== rate) vOut.playbackRate = rate;
+    }
+
+    vOut.addEventListener('timeupdate', applyRate);
+    // aplicar já no início
+    applyRate();
   }
 
-  // ====== Gravação 10s “cheios” (evita cair pra 9s) ======
-  async function record10s(){
-    chunks = [];
-    rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
+  async function flow(){
+    btn.disabled = true;
+    setStatus("🎬 Iniciando câmera…");
+    await initCamera();
 
-    rec.ondataavailable = (e)=>{ if(e.data && e.data.size) chunks.push(e.data); };
-    const startedAt = performance.now();
-
-    return new Promise(async (resolve)=>{
-      rec.onstop = async ()=>{
-        // pequena espera garante último pedaço em alguns browsers
-        await sleep(50);
-        const blob = new Blob(chunks, { type:'video/webm' });
-        resolve({ blob, ms: performance.now() - startedAt });
-      };
-
-      // timeslice para forçar “flush” recorrente de chunks
-      rec.start(250); // coleta a cada 250ms
-
-      // garante pelo menos 10.3s antes de parar (margem pra não fechar em 9.x)
-      await sleep(10300);
-      // força último chunk antes de parar
-      try{ rec.requestData(); }catch(_){}
-      rec.stop();
-    });
-  }
-
-  // ====== Fluxo principal ======
-  btnStart.addEventListener('click', async ()=>{
-    btnStart.disabled = true; setStatus("🎬 Gravando 10s…");
+    setStatus(supportsZoom ? "🔍 Zoom orgânico ativo." : "ℹ️ Seu dispositivo pode não suportar zoom óptico.");
     startLiveZoom();
 
-    const result = await record10s();
+    setStatus("🎥 Gravando 10s…");
+    const blob = await record10s();
 
-    // encerra câmera e preview
+    // encerra câmera/preview
     stopLiveZoom();
-    try { stream.getTracks().forEach(t=>t.stop()); } catch(_){}
+    try{ stream.getTracks().forEach(t=>t.stop()); }catch(_){}
     vLive.srcObject = null;
 
-    // playback local imediato
-    const localURL = URL.createObjectURL(result.blob);
-    vOut.src = localURL;
-    vOut.loop = true;
+    // playback local + controlador de velocidade
+    const urlLocal = URL.createObjectURL(blob);
+    vOut.src = urlLocal;
+    vOut.loop = false; // vamos tocar uma vez até o fim (20s de reprodução)
     await vOut.play().catch(()=>{});
-    setStatus(`✅ Gravado (~${(result.ms/1000).toFixed(1)}s). Enviando ao Cloud…`);
-
-    // efeitos no playback
     startOutZoom();
-    btnAlt.disabled = false;
-    btnExact.disabled = false;
-    exact20s(); // começa em 20s exatos; você pode clicar "Alternar" depois
+    // instala controlador para alternar as velocidades e totalizar 20s
+    vOut.addEventListener('loadedmetadata', installExact20AltController, { once:true });
+    if (vOut.readyState >= 1) { installExact20AltController(); }
 
-    // upload + QR
+    setStatus("☁️ Enviando ao Cloud…");
     try{
-      const data = await uploadToCloud(result.blob);
+      const data = await uploadToCloud(blob);
       if(data && data.secure_url){
         makeQR(data.secure_url);
         setStatus("✅ Upload concluído. QR gerado.");
       }else{
-        setStatus("⚠️ Upload sem URL. Mostrando local.");
-        makeQR(localURL);
+        makeQR(urlLocal);
+        setStatus("⚠️ Cloud sem URL. QR local gerado.");
       }
     }catch(err){
-      setStatus("⚠️ Upload falhou. QR do vídeo local gerado.");
-      makeQR(localURL);
       console.error(err);
+      makeQR(urlLocal);
+      setStatus("⚠️ Upload falhou. QR do vídeo local gerado.");
     }
-  });
+  }
 
-  // Botões de modo de slow
-  btnAlt.addEventListener('click', ()=>{
-    startAltSlow();
-    setStatus("🔁 Slow alternado ativo (duração visual ≈ 20s).");
-  });
-  btnExact.addEventListener('click', ()=>{
-    exact20s();
-    setStatus("⏱️ Slow 20s exatos (0.5x).");
-  });
+  // Controle de pausa para zoom no playback
+  vOut.addEventListener('pause', ()=>{/* o loop já respeita paused */});
+  vOut.addEventListener('ended', ()=>{ cancelOutZoom(); });
 
-  // Pausar = pausar “zoom playback”
-  vOut.addEventListener('pause', ()=>{ /* o loop já respeita paused */ });
-  vOut.addEventListener('play', ()=>{ /* nada, já está rodando */ });
-
-  // start
-  startCamera();
+  btn.addEventListener('click', flow);
   </script>
 </body>
 </html>
