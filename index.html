@@ -2,107 +2,108 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Vídeo Cinemático com QRCode</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gravação + Zoom + Slow Real</title>
 <style>
-  body {
-    background: black;
-    color: white;
-    text-align: center;
-    font-family: sans-serif;
-  }
-  video {
-    max-width: 100%;
-    transform-origin: center center;
-  }
+body { background:black; color:white; font-family:Arial; text-align:center; margin:0; padding:0; }
+h1 { color:gold; }
+.video-wrapper { width:100%; max-width:500px; margin:20px auto; overflow:hidden; border:2px solid gold; border-radius:10px; }
+video { width:100%; display:block; transform-origin:center center; }
+button { background:gold; color:black; padding:10px 20px; border:none; border-radius:5px; font-size:16px; margin:10px; cursor:pointer; }
+#qrcode { margin-top:20px; }
 </style>
 </head>
 <body>
 
-<h1>🎥 Gravando com Efeito Cinemático</h1>
-<video id="preview" autoplay playsinline></video>
+<h1>🎥 Gravação + Zoom + Slow Real</h1>
+<div class="video-wrapper">
+  <video id="camera" autoplay muted playsinline></video>
+</div>
 <br>
-<button id="startBtn">🎬 Iniciar Gravação</button>
-<button id="stopBtn" disabled>⏹ Parar</button>
-<div id="downloadArea"></div>
-<canvas id="qrCanvas"></canvas>
+<button id="startBtn">▶️ Gravar 10s</button>
 
-<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<h2>🎬 Vídeo Final</h2>
+<div class="video-wrapper">
+  <video id="finalVideo" controls playsinline></video>
+</div>
+<div id="qrcode"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.8/dist/ffmpeg.min.js"></script>
 <script>
-let mediaRecorder;
-let recordedChunks = [];
-let stream;
-const preview = document.getElementById('preview');
+const cameraVideo = document.getElementById("camera");
+const finalVideo = document.getElementById("finalVideo");
+let mediaRecorder, recordedChunks=[], stream;
 
-async function initCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: { exact: "environment" },
-      zoom: 3 // valor inicial, navegador ajusta se suportar
-    },
-    audio: true
-  });
-  preview.srcObject = stream;
+// Inicia câmera traseira
+async function startCamera(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:"environment"}}, audio:false});
+  }catch(e){
+    stream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+  }
+  cameraVideo.srcObject = stream;
 }
+startCamera();
 
-document.getElementById('startBtn').onclick = () => {
-  recordedChunks = [];
+document.getElementById("startBtn").addEventListener("click", async ()=>{
+  recordedChunks=[];
   mediaRecorder = new MediaRecorder(stream);
-  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-  mediaRecorder.onstop = playVideoWithEffects;
+  mediaRecorder.ondataavailable = e=>{ if(e.data.size>0) recordedChunks.push(e.data); };
+
+  mediaRecorder.onstop = async ()=>{
+    const blob = new Blob(recordedChunks,{type:'video/webm'});
+    const arrayBuffer = await blob.arrayBuffer();
+    
+    // Inicializa ffmpeg
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log:true });
+    await ffmpeg.load();
+    
+    // Grava input
+    ffmpeg.FS('writeFile','input.webm', new Uint8Array(arrayBuffer));
+    
+    // Transformação: slow + zoom
+    // 10s -> 20s, zoom de 1 -> 1.6 de forma orgânica
+    await ffmpeg.run(
+      '-i','input.webm',
+      '-filter_complex',
+      "[0:v]setpts=2*PTS,zoompan=z='1.0+0.6*sin(2*PI*on/100)':d=1:x='iw/4':y='ih/4',fps=30,format=yuv420p[v]",
+      '-map','[v]',
+      '-an',
+      'output.mp4'
+    );
+
+    const data = ffmpeg.FS('readFile','output.mp4');
+    const url = URL.createObjectURL(new Blob([data.buffer],{type:'video/mp4'}));
+    
+    finalVideo.src = url;
+    finalVideo.play();
+
+    // QR Code funcional
+    document.getElementById("qrcode").innerHTML="";
+    new QRCode(document.getElementById("qrcode"), url);
+  };
+
   mediaRecorder.start();
-  document.getElementById('startBtn').disabled = true;
-  document.getElementById('stopBtn').disabled = false;
-};
 
-document.getElementById('stopBtn').onclick = () => {
-  mediaRecorder.stop();
-  document.getElementById('startBtn').disabled = false;
-  document.getElementById('stopBtn').disabled = true;
-};
+  // Zoom orgânico na câmera ao vivo (apenas visual)
+  let camScale=1, camDir=1;
+  const zoomInterval = setInterval(()=>{
+    camScale += camDir*0.01;
+    if(camScale>=1.6) camDir=-1;
+    if(camScale<=1) camDir=1;
+    cameraVideo.style.transform=`scale(${camScale})`;
+  },50);
 
-function playVideoWithEffects() {
-  const blob = new Blob(recordedChunks, { type: "video/webm" });
-  const url = URL.createObjectURL(blob);
-
-  // Cria um player separado para os efeitos
-  const player = document.createElement('video');
-  player.src = url;
-  player.autoplay = true;
-  player.controls = true;
-  player.loop = true;
-  document.body.appendChild(player);
-
-  // Animação de zoom orgânico
-  player.animate([
-    { transform: "scale(1)" },
-    { transform: "scale(1.2)" },
-    { transform: "scale(1)" }
-  ], {
-    duration: 4000,
-    iterations: Infinity
-  });
-
-  // Alternar velocidade lento/rápido
-  let speeds = [0.5, 2];
-  let i = 0;
-  setInterval(() => {
-    player.playbackRate = speeds[i % speeds.length];
-    i++;
-  }, 4000);
-
-  // Gera link e QR Code
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'video_cinematico.webm';
-  a.textContent = '📥 Baixar Vídeo';
-  document.getElementById('downloadArea').appendChild(a);
-
-  QRCode.toCanvas(document.getElementById('qrCanvas'), url, { width: 200 }, function (error) {
-    if (error) console.error(error);
-  });
-}
-
-initCamera();
+  setTimeout(()=>{
+    mediaRecorder.stop();
+    clearInterval(zoomInterval);
+    stream.getTracks().forEach(track=>track.stop());
+    cameraVideo.style.transform="scale(1)";
+  },10000);
+});
 </script>
+
 </body>
 </html>
