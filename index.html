@@ -5,15 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gravação + Zoom + Slow + QR</title>
 <style>
-  body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center}
-  h1{color:#ffd700;margin:16px 0}
-  .wrap{width:100%;max-width:520px;margin:16px auto;padding:0 12px}
-  .frame{border:2px solid #ffd700;border-radius:12px;overflow:hidden}
-  video, canvas{width:100%;display:block;transform-origin:center center}
-  .row{margin:12px 0}
-  button{background:#ffd700;color:#000;border:0;border-radius:8px;padding:10px 14px;font-size:16px;cursor:pointer;margin:6px}
-  #qrcode{margin:16px auto}
-  .status{font-size:.9rem;margin:8px auto;opacity:.9}
+body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center}
+h1{color:#ffd700;margin:16px 0}
+.wrap{width:100%;max-width:520px;margin:16px auto;padding:0 12px}
+.frame{border:2px solid #ffd700;border-radius:12px;overflow:hidden}
+video, canvas{width:100%;display:block;transform-origin:center center}
+.row{margin:12px 0}
+button{background:#ffd700;color:#000;border:0;border-radius:8px;padding:10px 14px;font-size:16px;cursor:pointer;margin:6px}
+#qrcode{margin:16px auto}
+.status{font-size:.9rem;margin:8px auto;opacity:.9}
 </style>
 </head>
 <body>
@@ -42,6 +42,7 @@ const qrBox    = document.getElementById('qrcode');
 
 let stream, mediaRecorder, chunks = [];
 let zoomTimer = null;
+let rafZoomOut = null;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const setStatus = msg => statusEl.textContent = msg ?? "";
@@ -70,13 +71,47 @@ function stopLiveZoom(){
   vLive.style.transform='scale(1)';
 }
 
+// Zoom no playback
+function startPlaybackZoom(){
+  cancelPlaybackZoom();
+  let scale=1, dir=1;
+  const step = ()=>{
+    if(!vOut.paused){
+      scale += dir*0.0009;
+      if(scale>=1.6) dir=-1;
+      if(scale<=1) dir=1;
+      vOut.style.transform = `scale(${scale})`;
+    }
+    rafZoomOut = requestAnimationFrame(step);
+  };
+  rafZoomOut = requestAnimationFrame(step);
+}
+
+function cancelPlaybackZoom(){
+  if(rafZoomOut){ cancelAnimationFrame(rafZoomOut); rafZoomOut=null;}
+  vOut.style.transform='scale(1)';
+}
+
+// Slow alternado
+function startAltSlow(video){
+  let i=0;
+  const pattern = [0.5,2,0.5,2]; // alterna velocidade
+  const interval = 4000;
+  const step = ()=>{
+    if(video.paused) return;
+    video.playbackRate = pattern[i%pattern.length];
+    i++;
+    setTimeout(step, interval);
+  };
+  step();
+}
+
 // Upload para Cloudinary
 async function uploadToCloud(blob){
   const file = new File([blob],"video.webm",{type:'video/webm'});
   const fd = new FormData();
   fd.append("file",file);
   fd.append("upload_preset",UPLOAD_PRESET);
-
   const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, {method:"POST", body:fd});
   if(!res.ok) throw new Error("Upload falhou");
   return res.json();
@@ -100,25 +135,11 @@ async function record10s(){
       const blob = new Blob(chunks,{type:'video/webm'});
       resolve(blob);
     };
-    mediaRecorder.start(250); // chunks de 250ms
+    mediaRecorder.start(250);
     await sleep(10300);
     try{ mediaRecorder.requestData(); }catch(_){}
     mediaRecorder.stop();
   });
-}
-
-// Slow alternado
-function startAltSlow(video){
-  let i=0;
-  const pattern = [0.5,2,0.5,2]; // alterna velocidade
-  const interval = 4000;
-  const step = ()=>{
-    if(video.paused) return;
-    video.playbackRate = pattern[i%pattern.length];
-    i++;
-    setTimeout(step, interval);
-  };
-  step();
 }
 
 btnStart.addEventListener('click', async ()=>{
@@ -138,6 +159,7 @@ btnStart.addEventListener('click', async ()=>{
   vOut.loop = true;
   await vOut.play().catch(()=>{});
   startAltSlow(vOut);
+  startPlaybackZoom();
 
   setStatus("⬆️ Enviando para Cloud…");
   try{
