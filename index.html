@@ -1,155 +1,257 @@
-<!DOCTYPE html>
+<!doctype html>
+
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gravação com Zoom Orgânico + Slow + QR</title>
-<style>
-body { margin:0; background:#000; color:#fff; font-family:Arial,sans-serif; text-align:center; }
-h1 { color:#ffd700; }
-.video-wrapper { width:100%; max-width:520px; margin:20px auto; overflow:hidden; border:2px solid gold; border-radius:12px; }
-video, canvas { width:100%; display:block; }
-button { background:#ffd700; color:#000; border:none; border-radius:8px; padding:10px 14px; margin:6px; cursor:pointer; font-size:16px; }
-#qrcode { margin:20px auto; }
-.status { margin:10px auto; font-size:0.9rem; opacity:0.8; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rotina da Família — Tocha</title>
+  <style>
+    :root{--bg:#0b3b6f;--card:#092b50;--accent:#c59b2a;--muted:#cfe7ff}
+    *{box-sizing:border-box;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+    body{margin:0;min-height:100vh;background:linear-gradient(180deg,var(--bg),#05233e);color:var(--muted);display:flex;align-items:center;justify-content:center;padding:24px}
+    .app{width:100%;max-width:980px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.02));border-radius:14px;padding:20px;box-shadow:0 10px 30px rgba(2,6,23,0.6)}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    h1{margin:0;font-size:20px}
+    .top-controls{display:flex;gap:8px;align-items:center}
+    select,input,button{padding:8px 10px;border-radius:8px;border:0;background:rgba(255,255,255,0.05);color:var(--muted)}
+    button.primary{background:var(--accent);color:#072033;font-weight:700}
+    .grid{display:grid;grid-template-columns:1fr 320px;gap:16px;margin-top:16px}
+    .card{background:var(--card);padding:14px;border-radius:12px}
+    label{display:block;font-size:13px;margin-bottom:6px;color:#dbeeff}
+    .task-list{margin-top:8px}
+    .task{display:flex;align-items:center;gap:12px;padding:10px;border-radius:10px;margin-bottom:8px;background:linear-gradient(90deg,rgba(255,255,255,0.01),rgba(255,255,255,0.005))}
+    .task input[type=checkbox]{width:18px;height:18px}
+    .task .meta{margin-left:auto;text-align:right;font-size:13px;color:#bcdfff}
+    .progress{height:12px;background:rgba(255,255,255,0.05);border-radius:999px;overflow:hidden}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#ffd77a)}
+    .small{font-size:13px;color:#bcdfff}
+    .points{font-weight:700;color:var(--accent)}
+    .muted{color:#89b6e6}
+    .footer-helps{margin-top:12px;font-size:13px;color:#cfe7ff;opacity:0.9}
+    .child-actions{display:flex;gap:8px}
+    .danger{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#ffcccc}
+    @media(max-width:880px){.grid{grid-template-columns:1fr;}.app{padding:12px}}
+  </style>
 </head>
 <body>
-<h1>🎥 Gravação + Zoom Orgânico + Slow + QR</h1>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Rotina da Família — Um pequeno app de afazeres</h1>
+        <div class="small">Crie rotinas, conquiste pontos, celebre cada pequena vitória.</div>
+      </div>
+      <div class="top-controls">
+        <div class="child-actions">
+          <select id="childSelect"></select>
+          <input id="newChildName" placeholder="Adicionar filha" />
+          <button id="addChildBtn" class="primary">Adicionar</button>
+        </div>
+      </div>
+    </header><div class="grid">
+  <section class="card">
+    <div style="display:flex;gap:12px;align-items:center;">
+      <div>
+        <div class="small">Filha atual</div>
+        <div id="currentChildName" style="font-weight:800;font-size:18px;color:var(--accent)"></div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        <div class="small">Pontos</div>
+        <div id="points" class="points">0</div>
+      </div>
+    </div>
 
-<div class="video-wrapper">
-  <video id="preview" autoplay muted playsinline></video>
+    <div style="margin-top:12px">
+      <label>Adicionar tarefa</label>
+      <div style="display:flex;gap:8px">
+        <input id="taskName" placeholder="Ex: Arrumar cama" />
+        <select id="taskFreq"><option value="diario">Diário</option><option value="semanal">Semanal</option><option value="único">Único</option></select>
+        <input id="taskPoints" type="number" placeholder="pts" style="width:72px" />
+        <button id="addTaskBtn" class="primary">+ tarefa</button>
+      </div>
+    </div>
+
+    <div class="task-list" id="tasks"></div>
+
+    <div style="margin-top:10px">
+      <label>Progresso</label>
+      <div class="progress"><i id="progressFill" style="width:0%"></i></div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px"><span class="muted">Concluídas: <span id="doneCount">0</span></span><span class="muted">Total: <span id="totalCount">0</span></span></div>
+    </div>
+
+  </section>
+
+  <aside class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <label>Visão semanal</label>
+        <div class="small muted">Marque quando as tarefas forem feitas — celebre no fim da semana.</div>
+      </div>
+      <div>
+        <button id="resetWeek" class="danger">Resetar semana</button>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <label>Filhas cadastradas</label>
+      <div id="childrenList" class="small" style="margin-top:8px"></div>
+    </div>
+
+    <div style="margin-top:12px">
+      <label>Recompensas</label>
+      <div class="small muted">Use pontos para trocar por pequenas recompensas (sorvete, escolha do filme).</div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <input id="rewardName" placeholder="Ex: Sorvete" />
+        <input id="rewardCost" type="number" placeholder="custo" style="width:84px" />
+        <button id="addReward" class="primary">+ reward</button>
+      </div>
+      <div id="rewardsList" style="margin-top:8px" class="small"></div>
+    </div>
+
+    <div class="footer-helps">Dica: routines curtas (3–6 tarefas) funcionam melhor com crianças. Comece pequeno e aumente devagar.</div>
+  </aside>
 </div>
-<button id="btnRecord">▶️ Gravar 10s</button>
 
-<h2>📽️ Playback</h2>
-<div class="video-wrapper">
-  <video id="playback" controls></video>
-</div>
-<div id="qrcode"></div>
-<div class="status" id="status"></div>
+  </div>  <script>
+    // Estrutura de dados no localStorage
+    // key: 'rotina_familia_v1' -> {children: {id: {name, tasks: [{id,name,freq,points,done}]}, rewards: [...] , activeChildId}}
+    const STORAGE_KEY = 'rotina_familia_v1';
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>
-const CLOUD_NAME = "dxobnhynf";
-const UPLOAD_PRESET = "Plataforma_360";
-const preview = document.getElementById("preview");
-const playback = document.getElementById("playback");
-const btnRecord = document.getElementById("btnRecord");
-const qrBox = document.getElementById("qrcode");
-const statusEl = document.getElementById("status");
+    function uid(){return Math.random().toString(36).slice(2,9)}
 
-let stream, chunks = [];
-
-// Inicia câmera traseira
-async function startCamera() {
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } }, audio: false });
-  } catch(e) {
-    stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
-  }
-  preview.srcObject = stream;
-}
-startCamera();
-
-// Grava com zoom orgânico em canvas
-async function recordZoomedVideo() {
-  const videoTrack = stream.getVideoTracks()[0];
-  const settings = videoTrack.getSettings();
-  const canvas = document.createElement("canvas");
-  canvas.width = settings.width || 640;
-  canvas.height = settings.height || 480;
-  const ctx = canvas.getContext("2d");
-
-  let scale = 1, dir = 1;
-
-  const recorderStream = canvas.captureStream(30);
-  const recorder = new MediaRecorder(recorderStream, { mimeType: "video/webm; codecs=vp8" });
-  let localChunks = [];
-  recorder.ondataavailable = e => { if(e.data && e.data.size) localChunks.push(e.data); };
-  recorder.start(100);
-
-  return new Promise(resolve=>{
-    let startTime = performance.now();
-    function drawFrame(){
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      scale += dir*0.0025;
-      if(scale>1.6) dir=-1;
-      if(scale<1.0) dir=1;
-      ctx.save();
-      ctx.translate(canvas.width/2, canvas.height/2);
-      ctx.scale(scale, scale);
-      ctx.translate(-canvas.width/2, -canvas.height/2);
-      ctx.drawImage(preview, 0,0,canvas.width, canvas.height);
-      ctx.restore();
-      if(performance.now() - startTime < 10000) {
-        requestAnimationFrame(drawFrame);
-      } else {
-        recorder.stop();
-      }
+    function load(){
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw) return JSON.parse(raw);
+      // estado inicial de exemplo
+      const id1 = uid();
+      const id2 = uid();
+      const state = {children:{}, rewards:[], activeChildId:id1};
+      state.children[id1] = {id:id1,name:'Filha 1',tasks:[{id:uid(),name:'Arrumar cama',freq:'diario',points:2,done:false},{id:uid(),name:'Escovar os dentes',freq:'diario',points:1,done:false}]}
+      state.children[id2] = {id:id2,name:'Filha 2',tasks:[{id:uid(),name:'Guardar brinquedos',freq:'diario',points:2,done:false}]}
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+      return state;
     }
-    drawFrame();
 
-    recorder.onstop = ()=>{
-      const blob = new Blob(localChunks, {type:"video/webm"});
-      resolve(blob);
-    };
-  });
-}
+    let state = load();
 
-// Alterna velocidade (slow/fast)
-function applyPlaybackPattern(video){
-  let t=0;
-  const duration = video.duration;
-  video.playbackRate = 1;
-  function step(){
-    if(video.paused) return;
-    t += 0.04;
-    // alterna: 2s rápido, 3s lento = efeito 10s -> 20s
-    if((t%5)<2) video.playbackRate=2; else video.playbackRate=0.5;
-    requestAnimationFrame(step);
-  }
-  step();
-}
+    // UI refs
+    const childSelect = document.getElementById('childSelect');
+    const currentChildName = document.getElementById('currentChildName');
+    const addChildBtn = document.getElementById('addChildBtn');
+    const newChildName = document.getElementById('newChildName');
+    const tasksEl = document.getElementById('tasks');
+    const addTaskBtn = document.getElementById('addTaskBtn');
+    const taskName = document.getElementById('taskName');
+    const taskFreq = document.getElementById('taskFreq');
+    const taskPoints = document.getElementById('taskPoints');
+    const pointsEl = document.getElementById('points');
+    const progressFill = document.getElementById('progressFill');
+    const doneCount = document.getElementById('doneCount');
+    const totalCount = document.getElementById('totalCount');
+    const childrenList = document.getElementById('childrenList');
+    const resetWeek = document.getElementById('resetWeek');
+    const rewardsList = document.getElementById('rewardsList');
+    const addReward = document.getElementById('addReward');
+    const rewardName = document.getElementById('rewardName');
+    const rewardCost = document.getElementById('rewardCost');
 
-// Upload Cloudinary
-async function uploadCloud(blob){
-  const fd = new FormData();
-  fd.append("file", new File([blob], "video.webm", {type:"video/webm"}));
-  fd.append("upload_preset", UPLOAD_PRESET);
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`, {method:"POST", body:fd});
-  if(!res.ok) throw new Error("Falha upload");
-  return res.json();
-}
+    function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));}
 
-// QR Code
-function makeQR(url){
-  qrBox.innerHTML="";
-  new QRCode(qrBox, { text:url, width:220, height:220, correctLevel:QRCode.CorrectLevel.H });
-}
+    function renderChildren(){
+      childSelect.innerHTML = '';
+      childrenList.innerHTML = '';
+      for(const id in state.children){
+        const c = state.children[id];
+        const opt = document.createElement('option');opt.value = id;opt.textContent = c.name;
+        if(id === state.activeChildId) opt.selected = true;
+        childSelect.appendChild(opt);
+        const div = document.createElement('div');
+        div.style.display='flex';div.style.justifyContent='space-between';div.style.marginBottom='6px';
+        div.innerHTML = `<span>${c.name}</span><span style="opacity:0.9"><button data-id="${id}" class="danger" style="margin-right:6px">Apagar</button><button data-id="${id}" class="primary">Selecionar</button></span>`
+        childrenList.appendChild(div);
+      }
+      document.querySelectorAll('#childrenList button.primary').forEach(b=>b.addEventListener('click',e=>{state.activeChildId=e.target.dataset.id;save();render()}))
+      document.querySelectorAll('#childrenList button.danger').forEach(b=>b.addEventListener('click',e=>{if(confirm('Apagar esta filha e suas tarefas?')){delete state.children[e.target.dataset.id]; if(state.activeChildId===e.target.dataset.id){const keys=Object.keys(state.children);state.activeChildId=keys[0]||null} save(); render();}}))
+    }
 
-// Botão
-btnRecord.onclick = async ()=>{
-  btnRecord.disabled=true;
-  statusEl.textContent="🎬 Gravando 10s com zoom orgânico…";
-  const blob = await recordZoomedVideo();
-  statusEl.textContent="✅ Gravação completa. Enviando ao Cloud…";
+    function renderRewards(){
+      rewardsList.innerHTML='';
+      state.rewards.forEach((r,idx)=>{
+        const d = document.createElement('div');d.style.display='flex';d.style.justifyContent='space-between';d.style.marginBottom='6px';
+        d.innerHTML = `<span>${r.name} — ${r.cost} pts</span><span><button data-idx='${idx}' class='primary'>Resgatar</button></span>`;
+        rewardsList.appendChild(d);
+      })
+      document.querySelectorAll("#rewardsList button").forEach(b=>b.addEventListener('click',e=>{const idx=Number(e.target.dataset.idx);tryRedeem(idx)}));
+    }
 
-  playback.src = URL.createObjectURL(blob);
-  playback.loop = true;
-  playback.play();
-  applyPlaybackPattern(playback);
+    function tryRedeem(idx){
+      const child = state.children[state.activeChildId];
+      const reward = state.rewards[idx];
+      const childPoints = calcPoints(child);
+      if(childPoints >= reward.cost){
+        // desconta pontos: simplificaremos marcando tarefas como undone until points reduced (simpler approach: store pointsSpent)
+        if(!child.pointsSpent) child.pointsSpent=0;
+        child.pointsSpent += reward.cost;
+        alert(`Parabéns! ${child.name} resgatou: ${reward.name}`);
+        save();render();
+      } else alert('Pontos insuficientes');
+    }
 
-  try{
-    const data = await uploadCloud(blob);
-    makeQR(data.secure_url);
-    statusEl.textContent="✅ Upload concluído. QR Code gerado!";
-  }catch(e){
-    makeQR(playback.src);
-    statusEl.textContent="⚠️ Falha upload. QR Code do vídeo local gerado.";
-    console.error(e);
-  }
-};
-</script>
-</body>
+    function calcPoints(child){
+      const base = (child.tasks||[]).reduce((s,t)=>s + ((t.done? t.points : 0)),0);
+      const spent = child.pointsSpent||0;
+      return base - spent;
+    }
+
+    function render(){
+      renderChildren();renderRewards();
+      if(!state.activeChildId){currentChildName.textContent='—';tasksEl.innerHTML='Sem filhas cadastradas';return}
+      const child = state.children[state.activeChildId];
+      currentChildName.textContent = child.name;
+      pointsEl.textContent = calcPoints(child);
+      tasksEl.innerHTML='';
+      const total = child.tasks.length;
+      const done = child.tasks.filter(t=>t.done).length;
+      doneCount.textContent = done; totalCount.textContent = total; const pct = total? Math.round((done/total)*100) : 0;
+      progressFill.style.width = pct + '%';
+
+      child.tasks.forEach(t=>{
+        const tr = document.createElement('div');tr.className='task';
+        tr.innerHTML = `<input type='checkbox' data-id='${t.id}' ${t.done? 'checked':''} /> <div style='flex:1'><div style='font-weight:700'>${t.name}</div><div class='small muted'>${t.freq} • ${t.points} pts</div></div><div class='meta'><button data-id='${t.id}' class='danger'>Excluir</button></div>`
+        tasksEl.appendChild(tr);
+      })
+
+      // events
+      tasksEl.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener('change',e=>{
+        const id = e.target.dataset.id;const t = child.tasks.find(x=>x.id===id);t.done = e.target.checked; save(); render();
+      }))
+      tasksEl.querySelectorAll('button.danger').forEach(btn=>btn.addEventListener('click',e=>{
+        if(confirm('Excluir tarefa?')){ const id=e.target.dataset.id; child.tasks = child.tasks.filter(x=>x.id!==id); save(); render();}
+      }))
+    }
+
+    // actions
+    addChildBtn.addEventListener('click',()=>{
+      const name = newChildName.value.trim(); if(!name) return alert('Digite um nome');
+      const id = uid(); state.children[id]={id,name,tasks:[]}; state.activeChildId=id; newChildName.value=''; save(); render();
+    })
+
+    childSelect.addEventListener('change',()=>{state.activeChildId = childSelect.value; save(); render();})
+
+    addTaskBtn.addEventListener('click',()=>{
+      const name = taskName.value.trim(); const freq = taskFreq.value; const pts = Number(taskPoints.value)||1; if(!name) return alert('Nome da tarefa');
+      const child = state.children[state.activeChildId]; child.tasks.push({id:uid(),name:name,freq:freq,points:pts,done:false}); taskName.value=''; taskPoints.value=''; save(); render();
+    })
+
+    resetWeek.addEventListener('click',()=>{
+      if(!confirm('Resetar marcações da semana para todas as filhas?')) return; for(const id in state.children){ state.children[id].tasks.forEach(t=>t.done=false); if(state.children[id].pointsSpent) state.children[id].pointsSpent=0 } save(); render();
+    })
+
+    addReward.addEventListener('click',()=>{
+      const name = rewardName.value.trim(); const cost = Number(rewardCost.value)||0; if(!name || cost<=0) return alert('Nome e custo válidos'); state.rewards.push({name,cost}); rewardName.value=''; rewardCost.value=''; save(); render();
+    })
+
+    // inicializa
+    render();
+
+  </script></body>
 </html>
