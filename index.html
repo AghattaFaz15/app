@@ -3,137 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Status do Guerreiro</title>
+  <title>Família Lima Jesus</title>
   <link rel="manifest" href="manifest.json">
-  <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      margin: 0;
-      background: linear-gradient(to bottom, #001f4d, #002b80);
-      color: #f5f5f5;
-      text-align: center;
-      padding: 20px;
-    }
-    h1 {
-      color: gold;
-    }
-    .status {
-      background: rgba(255, 215, 0, 0.1);
-      border: 2px solid gold;
-      border-radius: 15px;
-      padding: 15px;
-      margin-bottom: 20px;
-    }
-    .xp-bar {
-      background: #333;
-      border-radius: 10px;
-      overflow: hidden;
-      margin: 10px 0;
-    }
-    .xp-fill {
-      height: 20px;
-      background: gold;
-      width: 0%;
-      transition: width 0.5s;
-    }
-    ul {
-      list-style: none;
-      padding: 0;
-    }
-    li {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      margin: 10px 0;
-      padding: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    button {
-      background: gold;
-      border: none;
-      border-radius: 10px;
-      padding: 5px 10px;
-      cursor: pointer;
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>⚔️ Guerreiro do Eterno ⚔️</h1>
-  
+  <h1>⚔️ Meu Personagem Real ⚔️</h1>
+
   <div class="status">
     <p><strong>Nível:</strong> <span id="nivel">1</span></p>
-    <div class="xp-bar">
-      <div class="xp-fill" id="xp-bar"></div>
-    </div>
+    <div class="xp-bar"><div id="xp-fill" class="xp-fill"></div></div>
     <p><span id="xp">0</span> / 100 XP</p>
-    <p><strong>Vida:</strong> ❤️ <span id="vida">100</span></p>
   </div>
 
   <h2>🎯 Missões do Dia</h2>
   <ul id="missoes"></ul>
 
-  <script type="module">
-    // ---- Firebase ----
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getDatabase, ref, onValue, set, update } 
-      from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+  <h2>🏆 Conquistas</h2>
+  <ul id="conquistas"></ul>
 
-    const firebaseConfig = {
-      apiKey: "SUA_API_KEY",
-      authDomain: "SEU_APP.firebaseapp.com",
-      databaseURL: "https://SEU_APP.firebaseio.com",
-      projectId: "SEU_APP",
-      storageBucket: "SEU_APP.appspot.com",
-      messagingSenderId: "000000000000",
-      appId: "1:000000000000:web:xxxxxxx"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-
-    const statusRef = ref(db, "status");
-    const missoesRef = ref(db, "missoes");
-
-    // Atualizar status em tempo real
-    onValue(statusRef, (snapshot) => {
-      const data = snapshot.val() || {};
-      document.getElementById("nivel").textContent = data.nivel || 1;
-      document.getElementById("xp").textContent = data.xp || 0;
-      document.getElementById("vida").textContent = data.vida || 100;
-      document.getElementById("xp-bar").style.width = (data.xp % 100) + "%";
-    });
-
-    // Mostrar missões
-    onValue(missoesRef, (snapshot) => {
-      const lista = document.getElementById("missoes");
-      lista.innerHTML = "";
-      const missoes = snapshot.val() || {};
-      Object.entries(missoes).forEach(([id, m]) => {
-        const li = document.createElement("li");
-        li.innerHTML = `
-          <span>${m.texto}</span>
-          <button onclick="concluirMissao('${id}', ${m.xp})">✔</button>
-        `;
-        lista.appendChild(li);
-      });
-    });
-
-    // Concluir missão
-    window.concluirMissao = (id, xp) => {
-      onValue(statusRef, (snapshot) => {
-        const data = snapshot.val() || { xp: 0, nivel: 1 };
-        let novoXP = (data.xp || 0) + xp;
-        let nivel = data.nivel || 1;
-        if (novoXP >= 100) {
-          nivel++;
-          novoXP = novoXP - 100;
-        }
-        update(statusRef, { xp: novoXP, nivel });
-      }, { onlyOnce: true });
-
-      set(ref(db, "missoes/" + id), null); // remove missão concluída
-    };
-  </script>
+<script src="app.js"></script>
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('service-worker.js')
+    .then(()=>console.log('Service Worker registrado'));
+}
+</script>
 </body>
 </html>
