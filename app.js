@@ -1,71 +1,85 @@
-// ----- Dados iniciais -----
-let status = JSON.parse(localStorage.getItem('status')) || { nivel:1, xp:0, conquistas:[] };
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { getDatabase, ref, onValue, push, update, remove } 
+  from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
-const missoesFixas = [
-  {id:1, texto:"Oração matinal", xp:10},
-  {id:2, texto:"Leitura da Bíblia", xp:15},
-  {id:3, texto:"Ajudar alguém da família", xp:10},
-  {id:4, texto:"Reflexão ou meditação", xp:10}
-];
+// Configuração do seu Firebase
+const firebaseConfig = {
+  apiKey: "AIzaSyCxjJXRBD2OIa3w8AgFQYVSimXErFGjVc4",
+  authDomain: "aplicativo-72b33.firebaseapp.com",
+  databaseURL: "https://aplicativo-72b33-default-rtdb.firebaseio.com/",
+  projectId: "aplicativo-72b33",
+  storageBucket: "aplicativo-72b33.appspot.com",
+  messagingSenderId: "968841875201",
+  appId: "1:968841875201:web:08e6d443f8302367e1d500",
+  measurementId: "G-6XYSJN0GFT"
+};
 
-// Gerar missões alteráveis aleatórias
-function gerarMissoesAlteraveis(){
-  const aleatorias = [
-    {id:101, texto:"Exercício físico", xp:5},
-    {id:102, texto:"Aprender algo novo", xp:10},
-    {id:103, texto:"Organizar algo da casa", xp:5},
-    {id:104, texto:"Escrever diário ou gratidão", xp:8}
-  ];
-  return aleatorias.sort(()=>0.5-Math.random()).slice(0,2); // pegar 2 aleatórias
-}
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-let missoes = [...missoesFixas, ...gerarMissoesAlteraveis()];
+// Referências
+const statusRef = ref(db, "status");
+const missoesRef = ref(db, "missoes");
 
-// ----- Funções -----
-function salvar(){
-  localStorage.setItem('status', JSON.stringify(status));
-}
+// Adicionar missão
+window.adicionarMissao = () => {
+  const texto = document.getElementById("nova-missao-texto").value;
+  const xp = parseInt(document.getElementById("nova-missao-xp").value) || 5;
+  if(!texto) return;
+  push(missoesRef, { texto, xp, frase: `Você completou: ${texto} ✨` });
+  document.getElementById("nova-missao-texto").value = '';
+  document.getElementById("nova-missao-xp").value = '';
+};
 
-function atualizarTela(){
-  document.getElementById("nivel").textContent = status.nivel;
-  document.getElementById("xp").textContent = status.xp;
-  document.getElementById("xp-fill").style.width = status.xp + "%";
+// Renderizar missões em tempo real
+onValue(missoesRef, (snapshot)=>{
+  const lista = document.getElementById("missoes");
+  lista.innerHTML = "";
+  snapshot.forEach(child => {
+    const m = child.val();
+    const li = document.createElement("li");
+    li.innerHTML = `<span>${m.texto}</span> <button onclick="completarMissao('${child.key}', ${m.xp}, '${m.frase}')">✔</button>`;
+    lista.appendChild(li);
+  });
+});
 
-  // conquistas
-  const conquistasEl = document.getElementById('conquistas');
+// Completar missão
+window.completarMissao = (id, xp, frase) => {
+  onValue(statusRef, snapshot => {
+    const data = snapshot.val() || { xp:0, nivel:1, conquistas:[] };
+    let novoXP = data.xp + xp;
+    let nivel = data.nivel;
+    let conquistas = data.conquistas || [];
+    let xpParaProximoNivel = nivel * 100;
+
+    if(novoXP >= xpParaProximoNivel){
+      nivel++;
+      novoXP -= xpParaProximoNivel;
+      conquistas.push(`Subiu para nível ${nivel} ao completar missão`);
+      alert(`✨ Parabéns! Você subiu para o nível ${nivel} ✨`);
+    }
+    if(frase) conquistas.push(frase);
+
+    update(statusRef, { xp: novoXP, nivel, conquistas });
+    remove(ref(db, "missoes/" + id));
+  }, { onlyOnce: true });
+};
+
+// Renderizar status em tempo real
+onValue(statusRef, snapshot=>{
+  const data = snapshot.val() || { xp:0, nivel:1, conquistas:[] };
+  document.getElementById("nivel").textContent = data.nivel;
+  const xpParaProximoNivel = data.nivel * 100;
+  document.getElementById("xp").textContent = data.xp;
+  document.getElementById("xp-next").textContent = xpParaProximoNivel;
+  document.getElementById("xp-fill").style.width = (data.xp/xpParaProximoNivel*100) + "%";
+
+  // Conquistas
+  const conquistasEl = document.getElementById("conquistas");
   conquistasEl.innerHTML = "";
-  status.conquistas.forEach(c=>{
-    const li = document.createElement('li');
+  (data.conquistas||[]).forEach(c=>{
+    const li = document.createElement("li");
     li.textContent = c;
     conquistasEl.appendChild(li);
   });
-}
-
-function renderMissoes(){
-  const lista = document.getElementById("missoes");
-  lista.innerHTML = "";
-  missoes.forEach(m=>{
-    const li = document.createElement('li');
-    li.innerHTML = `<span>${m.texto}</span> <button onclick="completarMissao(${m.id})">✔</button>`;
-    lista.appendChild(li);
-  });
-}
-
-window.completarMissao = (id)=>{
-  const missao = missoes.find(m=>m.id===id);
-  if(!missao) return;
-  status.xp += missao.xp;
-  if(status.xp >= 100){
-    status.nivel++;
-    status.conquistas.push(`Subiu para nível ${status.nivel} ao completar "${missao.texto}"`);
-    status.xp -= 100;
-  }
-  missoes = missoes.filter(m=>m.id!==id); // remove missão concluída
-  salvar();
-  renderMissoes();
-  atualizarTela();
-}
-
-// ----- Inicializar -----
-renderMissoes();
-atualizarTela();
+});
