@@ -1,0 +1,57 @@
+body {
+  font-family: 'Arial', sans-serif;
+  background: linear-gradient(to bottom, #0b3d91, #3a6fcf);
+  color: white;
+  text-align: center;
+}
+
+#personagens {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 20px;
+}
+
+.card {
+  border: 2px solid gold;
+  border-radius: 10px;
+  padding: 10px;
+  margin: 10px;
+  width: 150px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.card:hover {
+  transform: scale(1.05);
+}
+
+/* Modal */
+.modal {
+  display: none; 
+  position: fixed;
+  z-index: 10;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0,0,0,0.7);
+}
+
+.modal-content {
+  background-color: #001a4d;
+  margin: 15% auto;
+  padding: 20px;
+  border: 2px solid gold;
+  width: 80%;
+  max-width: 400px;
+  border-radius: 10px;
+}
+
+#close {
+  color: white;
+  float: right;
+  font-size: 28px;
+  cursor: pointer;
+}
