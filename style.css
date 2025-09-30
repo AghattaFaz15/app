@@ -7,10 +7,7 @@ body {
   padding: 20px;
 }
 
-h1 {
-  color: gold;
-  margin-bottom: 20px;
-}
+h1 { color: gold; margin-bottom: 20px; }
 
 .status {
   border: 2px solid gold;
@@ -35,10 +32,7 @@ h1 {
   transition: width 0.5s ease-in-out;
 }
 
-ul {
-  list-style: none;
-  padding: 0;
-}
+ul { list-style: none; padding: 0; }
 
 li {
   background: rgba(255, 215, 0, 0.1);
