@@ -1,28 +1,37 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Família Lima Jesus</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Família Lima Jesus</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
 </head>
 <body>
   <h1>⚔️ Meu Personagem Real ⚔️</h1>
 
+  <!-- Status do personagem -->
   <div class="status">
     <p><strong>Nível:</strong> <span id="nivel">1</span></p>
     <div class="xp-bar"><div id="xp-fill" class="xp-fill"></div></div>
-    <p><span id="xp">0</span> / 100 XP</p>
+    <p><span id="xp">0</span> / <span id="xp-next">100</span> XP</p>
   </div>
 
+  <!-- Missões -->
   <h2>🎯 Missões do Dia</h2>
   <ul id="missoes"></ul>
 
+  <!-- Criar/editar missões -->
+  <h2>✏️ Criar/Editar Missões</h2>
+  <input id="nova-missao-texto" placeholder="Texto da missão">
+  <input id="nova-missao-xp" type="number" placeholder="XP">
+  <button onclick="adicionarMissao()">Adicionar Missão</button>
+
+  <!-- Conquistas -->
   <h2>🏆 Conquistas</h2>
   <ul id="conquistas"></ul>
 
-<script src="app.js"></script>
+<script type="module" src="app.js"></script>
 <script>
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('service-worker.js')
