@@ -1,12 +1,8 @@
 // ==========================
 // DADOS INICIAIS
 // ==========================
-let dados = {
-  jogador: {
-    nome: "⚔️ Guerreiro do Eterno ⚔️",
-    nivel: 1,
-    xp: 0
-  },
+const DADOS_INICIAIS = {
+  jogador: { nome: "⚔️ Guerreiro do Eterno ⚔️", nivel: 1, xp: 0, ultimaData: new Date().toDateString() },
   niveis: [
     { nivel: 1, xpNecessario: 200, titulo: "Aprendiz da Luz" },
     { nivel: 2, xpNecessario: 400, titulo: "Guardião da Palavra" },
@@ -47,104 +43,123 @@ let dados = {
   missoesAtivas: []
 };
 
+let dados = {};
+const uid = "tocha_unico"; // seu identificador de jogador
+
 // ==========================
-// FUNÇÕES PRINCIPAIS
+// FUNÇÕES FIREBASE
 // ==========================
-
-// Sorteia 4 aleatórias + fixas
-function renovarMissoes() {
-  dados.missoesFixas.forEach(m => m.concluida = false);
-
-  let banco = [...dados.missoesBanco];
-  let aleatorias = [];
-  for (let i = 0; i < 4; i++) {
-    const idx = Math.floor(Math.random() * banco.length);
-    aleatorias.push(banco.splice(idx, 1)[0]);
-  }
-
-  dados.missoesAtivas = [...dados.missoesFixas, ...aleatorias];
-  salvarDados();
-  renderizar();
+function salvarDadosFirebase() {
+  firebase.database().ref("jogadores/" + uid).set(dados);
 }
 
-// Concluir missão
-function concluirMissao(id) {
-  const missao = dados.missoesAtivas.find(m => m.id === id);
-  if (missao && !missao.concluida) {
-    missao.concluida = true;
-    dados.jogador.xp += missao.xp;
-    verificarNivel();
-    salvarDados();
+function carregarDadosFirebase() {
+  firebase.database().ref("jogadores/" + uid).once("value").then(snapshot => {
+    if(snapshot.exists()) {
+      dados = snapshot.val();
+      checarDia();
+    } else {
+      dados = JSON.parse(JSON.stringify(DADOS_INICIAIS));
+      renovarMissoes();
+    }
+  });
+}
+
+// ==========================
+// RESET DIÁRIO E MISSÕES
+// ==========================
+function checarDia() {
+  const hoje = new Date().toDateString();
+  if(dados.jogador.ultimaData !== hoje){
+    dados.jogador.ultimaData = hoje;
+    renovarMissoes();
+  } else {
     renderizar();
   }
 }
 
-// Verificar nível
-function verificarNivel() {
-  let nivelAtual = dados.niveis.find(n => n.nivel === dados.jogador.nivel);
-  if (dados.jogador.xp >= nivelAtual.xpNecessario) {
-    dados.jogador.nivel++;
-    alert("🎉 Subiu de nível! Agora você é: " + dados.niveis.find(n => n.nivel === dados.jogador.nivel).titulo);
+function renovarMissoes() {
+  dados.missoesFixas.forEach(m => m.concluida = false);
+  let banco = [...dados.missoesBanco];
+  let aleatorias = [];
+  for (let i=0; i<4; i++){
+    const idx = Math.floor(Math.random()*banco.length);
+    aleatorias.push(banco.splice(idx,1)[0]);
+  }
+  dados.missoesAtivas = [...dados.missoesFixas, ...aleatorias];
+  salvarDadosFirebase();
+  renderizar();
+}
+
+// ==========================
+// FUNÇÕES DE MISSÕES
+// ==========================
+function concluirMissao(id){
+  const missao = dados.missoesAtivas.find(m => m.id===id);
+  if(missao && !missao.concluida){
+    missao.concluida = true;
+    dados.jogador.xp += missao.xp;
+    verificarNivel();
+    salvarDadosFirebase();
+    renderizar();
   }
 }
 
-// Criar missão
-function criarMissao() {
+function criarMissao(){
   const texto = document.getElementById("inputMissao").value.trim();
-  if (texto) {
+  if(texto){
     const nova = { id: Date.now(), texto, xp: 20, conselho: "Missão criada por você!", concluida: false };
     dados.missoesAtivas.push(nova);
-    salvarDados();
+    salvarDadosFirebase();
     renderizar();
     document.getElementById("inputMissao").value = "";
   }
 }
 
-// Excluir missão
-function excluirMissao(id) {
-  dados.missoesAtivas = dados.missoesAtivas.filter(m => m.id !== id);
-  salvarDados();
+function excluirMissao(id){
+  dados.missoesAtivas = dados.missoesAtivas.filter(m => m.id!==id);
+  salvarDadosFirebase();
   renderizar();
 }
 
-// Sortear outra
-function sortearOutra() {
-  if (dados.missoesBanco.length > 0) {
-    const idx = Math.floor(Math.random() * dados.missoesBanco.length);
+function sortearOutra(){
+  if(dados.missoesBanco.length>0){
+    const idx = Math.floor(Math.random()*dados.missoesBanco.length);
     dados.missoesAtivas.push(dados.missoesBanco[idx]);
-    salvarDados();
+    salvarDadosFirebase();
     renderizar();
   }
 }
 
-// Resetar jogo
-function resetarJogo() {
-  if (confirm("Deseja realmente resetar o jogo?")) {
-    dados.jogador.nivel = 1;
-    dados.jogador.xp = 0;
-    renovarMissoes();
+// ==========================
+// NÍVEL
+// ==========================
+function verificarNivel(){
+  let nivelAtual = dados.niveis.find(n => n.nivel===dados.jogador.nivel);
+  if(dados.jogador.xp >= nivelAtual.xpNecessario){
+    dados.jogador.nivel++;
+    alert("🎉 Subiu de nível! Agora você é: "+dados.niveis.find(n=>n.nivel===dados.jogador.nivel).titulo);
   }
 }
 
 // ==========================
 // RENDERIZAÇÃO
 // ==========================
-function renderizar() {
+function renderizar(){
   document.getElementById("nivel").innerText = dados.jogador.nivel;
-  let nivelAtual = dados.niveis.find(n => n.nivel === dados.jogador.nivel);
+  let nivelAtual = dados.niveis.find(n=>n.nivel===dados.jogador.nivel);
   document.getElementById("tituloNivel").innerText = nivelAtual.titulo;
   document.getElementById("xp").innerText = dados.jogador.xp;
   document.getElementById("xpNecessario").innerText = nivelAtual.xpNecessario;
   document.getElementById("barraXP").style.width = (dados.jogador.xp / nivelAtual.xpNecessario * 100) + "%";
-
   document.getElementById("fraseDia").innerText = dados.frasesDia[new Date().getDate() % dados.frasesDia.length];
 
   let lista = document.getElementById("listaMissoes");
   lista.innerHTML = "";
-  dados.missoesAtivas.forEach(m => {
+  dados.missoesAtivas.forEach(m=>{
     let li = document.createElement("li");
     li.innerHTML = `
-      <span class="${m.concluida ? 'feito' : ''}">${m.texto}</span>
+      <span class="${m.concluida?'feito':''}">${m.texto}</span>
       <small>(${m.conselho})</small>
       <button onclick="concluirMissao(${m.id})">✔</button>
       <button onclick="excluirMissao(${m.id})">❌</button>
@@ -154,20 +169,6 @@ function renderizar() {
 }
 
 // ==========================
-// LOCALSTORAGE
+// ONLOAD
 // ==========================
-function salvarDados() {
-  localStorage.setItem("dadosApp", JSON.stringify(dados));
-}
-
-function carregarDados() {
-  let salvo = localStorage.getItem("dadosApp");
-  if (salvo) {
-    dados = JSON.parse(salvo);
-  } else {
-    renovarMissoes();
-  }
-  renderizar();
-}
-
-window.onload = carregarDados;
+window.onload = carregarDadosFirebase;
