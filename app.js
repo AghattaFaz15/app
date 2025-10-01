@@ -1,85 +1,173 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { getDatabase, ref, onValue, push, update, remove } 
-  from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-
-// Configuração do seu Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyCxjJXRBD2OIa3w8AgFQYVSimXErFGjVc4",
-  authDomain: "aplicativo-72b33.firebaseapp.com",
-  databaseURL: "https://aplicativo-72b33-default-rtdb.firebaseio.com/",
-  projectId: "aplicativo-72b33",
-  storageBucket: "aplicativo-72b33.appspot.com",
-  messagingSenderId: "968841875201",
-  appId: "1:968841875201:web:08e6d443f8302367e1d500",
-  measurementId: "G-6XYSJN0GFT"
+// ==========================
+// DADOS INICIAIS
+// ==========================
+let dados = {
+  jogador: {
+    nome: "⚔️ Guerreiro do Eterno ⚔️",
+    nivel: 1,
+    xp: 0
+  },
+  niveis: [
+    { nivel: 1, xpNecessario: 200, titulo: "Aprendiz da Luz" },
+    { nivel: 2, xpNecessario: 400, titulo: "Guardião da Palavra" },
+    { nivel: 3, xpNecessario: 600, titulo: "Discípulo Firme" },
+    { nivel: 4, xpNecessario: 800, titulo: "Servo da Verdade" },
+    { nivel: 5, xpNecessario: 1000, titulo: "Atalaia do Reino" },
+    { nivel: 6, xpNecessario: 1200, titulo: "Guerreiro da Fé" },
+    { nivel: 7, xpNecessario: 1400, titulo: "Campeão da Esperança" },
+    { nivel: 8, xpNecessario: 1600, titulo: "Poeta do Altíssimo" },
+    { nivel: 9, xpNecessario: 1800, titulo: "Voz Profética" },
+    { nivel: 10, xpNecessario: 2000, titulo: "Embaixador da Eternidade" }
+  ],
+  frasesDia: [
+    "A força não vem do corpo, mas do Espírito que habita em ti.",
+    "O amanhã se vence com a disciplina de hoje.",
+    "Matar o velho homem é mais difícil do que matar um leão.",
+    "A vitória começa em pensamentos disciplinados.",
+    "Quem se curva diante de Deus não se curva diante dos homens."
+  ],
+  missoesFixas: [
+    { id: 1, texto: "Orar ao amanhecer", xp: 20, conselho: "Quem começa o dia no altar, caminha em vitória.", concluida: false },
+    { id: 2, texto: "Meditar em 1 versículo", xp: 20, conselho: "Um versículo diário é uma semente eterna.", concluida: false },
+    { id: 3, texto: "Beber 2L de água", xp: 20, conselho: "Água para o corpo, Palavra para a alma.", concluida: false },
+    { id: 4, texto: "Cuidar do corpo com exercício", xp: 20, conselho: "O corpo é templo; fortalece-o com zelo.", concluida: false }
+  ],
+  missoesBanco: [
+    { id: 101, texto: "Escrever uma frase poética sobre Deus", xp: 25, conselho: "Tua pena pode ser espada que inspira." },
+    { id: 102, texto: "Gravar um vídeo cantando um hino", xp: 30, conselho: "A tua voz é incenso subindo ao céu." },
+    { id: 103, texto: "Ajudar alguém da família", xp: 20, conselho: "Servir aos teus é servir ao Senhor." },
+    { id: 104, texto: "Anotar 3 aprendizados do dia", xp: 20, conselho: "O sábio não só vive, ele registra." },
+    { id: 105, texto: "Fazer 10 minutos de silêncio e oração", xp: 20, conselho: "O silêncio é o idioma de Deus." },
+    { id: 106, texto: "Ler 1 capítulo de um livro", xp: 25, conselho: "Um livro é outro mestre que te acompanha." },
+    { id: 107, texto: "Escrever 1 parágrafo para teu livro", xp: 25, conselho: "Cada parágrafo é tijolo da tua obra." },
+    { id: 108, texto: "Compartilhar 1 reflexão no Instagram", xp: 25, conselho: "Usa a rede como púlpito digital." },
+    { id: 109, texto: "Ajudar alguém sem esperar retorno", xp: 30, conselho: "A dádiva sem interesse enche o céu de alegria." },
+    { id: 110, texto: "Revisar metas e agradecer a Deus", xp: 30, conselho: "Planejamento sem gratidão é vazio." }
+  ],
+  missoesAtivas: []
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+// ==========================
+// FUNÇÕES PRINCIPAIS
+// ==========================
 
-// Referências
-const statusRef = ref(db, "status");
-const missoesRef = ref(db, "missoes");
+// Sorteia 4 aleatórias + fixas
+function renovarMissoes() {
+  dados.missoesFixas.forEach(m => m.concluida = false);
 
-// Adicionar missão
-window.adicionarMissao = () => {
-  const texto = document.getElementById("nova-missao-texto").value;
-  const xp = parseInt(document.getElementById("nova-missao-xp").value) || 5;
-  if(!texto) return;
-  push(missoesRef, { texto, xp, frase: `Você completou: ${texto} ✨` });
-  document.getElementById("nova-missao-texto").value = '';
-  document.getElementById("nova-missao-xp").value = '';
-};
+  let banco = [...dados.missoesBanco];
+  let aleatorias = [];
+  for (let i = 0; i < 4; i++) {
+    const idx = Math.floor(Math.random() * banco.length);
+    aleatorias.push(banco.splice(idx, 1)[0]);
+  }
 
-// Renderizar missões em tempo real
-onValue(missoesRef, (snapshot)=>{
-  const lista = document.getElementById("missoes");
+  dados.missoesAtivas = [...dados.missoesFixas, ...aleatorias];
+  salvarDados();
+  renderizar();
+}
+
+// Concluir missão
+function concluirMissao(id) {
+  const missao = dados.missoesAtivas.find(m => m.id === id);
+  if (missao && !missao.concluida) {
+    missao.concluida = true;
+    dados.jogador.xp += missao.xp;
+    verificarNivel();
+    salvarDados();
+    renderizar();
+  }
+}
+
+// Verificar nível
+function verificarNivel() {
+  let nivelAtual = dados.niveis.find(n => n.nivel === dados.jogador.nivel);
+  if (dados.jogador.xp >= nivelAtual.xpNecessario) {
+    dados.jogador.nivel++;
+    alert("🎉 Subiu de nível! Agora você é: " + dados.niveis.find(n => n.nivel === dados.jogador.nivel).titulo);
+  }
+}
+
+// Criar missão
+function criarMissao() {
+  const texto = document.getElementById("inputMissao").value.trim();
+  if (texto) {
+    const nova = { id: Date.now(), texto, xp: 20, conselho: "Missão criada por você!", concluida: false };
+    dados.missoesAtivas.push(nova);
+    salvarDados();
+    renderizar();
+    document.getElementById("inputMissao").value = "";
+  }
+}
+
+// Excluir missão
+function excluirMissao(id) {
+  dados.missoesAtivas = dados.missoesAtivas.filter(m => m.id !== id);
+  salvarDados();
+  renderizar();
+}
+
+// Sortear outra
+function sortearOutra() {
+  if (dados.missoesBanco.length > 0) {
+    const idx = Math.floor(Math.random() * dados.missoesBanco.length);
+    dados.missoesAtivas.push(dados.missoesBanco[idx]);
+    salvarDados();
+    renderizar();
+  }
+}
+
+// Resetar jogo
+function resetarJogo() {
+  if (confirm("Deseja realmente resetar o jogo?")) {
+    dados.jogador.nivel = 1;
+    dados.jogador.xp = 0;
+    renovarMissoes();
+  }
+}
+
+// ==========================
+// RENDERIZAÇÃO
+// ==========================
+function renderizar() {
+  document.getElementById("nivel").innerText = dados.jogador.nivel;
+  let nivelAtual = dados.niveis.find(n => n.nivel === dados.jogador.nivel);
+  document.getElementById("tituloNivel").innerText = nivelAtual.titulo;
+  document.getElementById("xp").innerText = dados.jogador.xp;
+  document.getElementById("xpNecessario").innerText = nivelAtual.xpNecessario;
+  document.getElementById("barraXP").style.width = (dados.jogador.xp / nivelAtual.xpNecessario * 100) + "%";
+
+  document.getElementById("fraseDia").innerText = dados.frasesDia[new Date().getDate() % dados.frasesDia.length];
+
+  let lista = document.getElementById("listaMissoes");
   lista.innerHTML = "";
-  snapshot.forEach(child => {
-    const m = child.val();
-    const li = document.createElement("li");
-    li.innerHTML = `<span>${m.texto}</span> <button onclick="completarMissao('${child.key}', ${m.xp}, '${m.frase}')">✔</button>`;
+  dados.missoesAtivas.forEach(m => {
+    let li = document.createElement("li");
+    li.innerHTML = `
+      <span class="${m.concluida ? 'feito' : ''}">${m.texto}</span>
+      <small>(${m.conselho})</small>
+      <button onclick="concluirMissao(${m.id})">✔</button>
+      <button onclick="excluirMissao(${m.id})">❌</button>
+    `;
     lista.appendChild(li);
   });
-});
+}
 
-// Completar missão
-window.completarMissao = (id, xp, frase) => {
-  onValue(statusRef, snapshot => {
-    const data = snapshot.val() || { xp:0, nivel:1, conquistas:[] };
-    let novoXP = data.xp + xp;
-    let nivel = data.nivel;
-    let conquistas = data.conquistas || [];
-    let xpParaProximoNivel = nivel * 100;
+// ==========================
+// LOCALSTORAGE
+// ==========================
+function salvarDados() {
+  localStorage.setItem("dadosApp", JSON.stringify(dados));
+}
 
-    if(novoXP >= xpParaProximoNivel){
-      nivel++;
-      novoXP -= xpParaProximoNivel;
-      conquistas.push(`Subiu para nível ${nivel} ao completar missão`);
-      alert(`✨ Parabéns! Você subiu para o nível ${nivel} ✨`);
-    }
-    if(frase) conquistas.push(frase);
+function carregarDados() {
+  let salvo = localStorage.getItem("dadosApp");
+  if (salvo) {
+    dados = JSON.parse(salvo);
+  } else {
+    renovarMissoes();
+  }
+  renderizar();
+}
 
-    update(statusRef, { xp: novoXP, nivel, conquistas });
-    remove(ref(db, "missoes/" + id));
-  }, { onlyOnce: true });
-};
-
-// Renderizar status em tempo real
-onValue(statusRef, snapshot=>{
-  const data = snapshot.val() || { xp:0, nivel:1, conquistas:[] };
-  document.getElementById("nivel").textContent = data.nivel;
-  const xpParaProximoNivel = data.nivel * 100;
-  document.getElementById("xp").textContent = data.xp;
-  document.getElementById("xp-next").textContent = xpParaProximoNivel;
-  document.getElementById("xp-fill").style.width = (data.xp/xpParaProximoNivel*100) + "%";
-
-  // Conquistas
-  const conquistasEl = document.getElementById("conquistas");
-  conquistasEl.innerHTML = "";
-  (data.conquistas||[]).forEach(c=>{
-    const li = document.createElement("li");
-    li.textContent = c;
-    conquistasEl.appendChild(li);
-  });
-});
+window.onload = carregarDados;
