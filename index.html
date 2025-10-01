@@ -3,180 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>⚔️ Família Lima Jesus ⚔️</title>
-  <link rel="manifest" href="manifest.json">
-  <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      margin: 0;
-      background: linear-gradient(to bottom, #001f4d, #002b80);
-      color: #f5f5f5;
-      text-align: center;
-      padding: 20px;
-    }
-    h1 { color: gold; }
-    .status, .conquistas-box {
-      background: rgba(255, 215, 0, 0.1);
-      border: 2px solid gold;
-      border-radius: 15px;
-      padding: 15px;
-      margin-bottom: 20px;
-    }
-    .xp-bar {
-      background: #333;
-      border-radius: 10px;
-      overflow: hidden;
-      margin: 10px 0;
-    }
-    .xp-fill {
-      height: 20px;
-      background: gold;
-      width: 0%;
-      transition: width 0.5s;
-    }
-    ul { list-style: none; padding: 0; }
-    li {
-      background: rgba(255,255,255,0.1);
-      border-radius: 10px;
-      margin: 10px 0;
-      padding: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    button {
-      background: gold;
-      border: none;
-      border-radius: 10px;
-      padding: 5px 10px;
-      cursor: pointer;
-    }
-    input { padding:5px; margin:5px; border-radius:5px; border:none;}
-  </style>
+  <title>⚔️ Guerreiro do Eterno ⚔️</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>⚔️ Família Lima Jesus ⚔️</h1>
+  <div class="app-container">
+    <h1>⚔️ Guerreiro do Eterno ⚔️</h1>
 
-  <div class="status">
-    <p>Nível: <span id="nivel">1</span></p>
-    <div class="xp-bar">
-      <div class="xp-fill" id="xp-fill"></div>
+    <!-- Status -->
+    <div class="status-box">
+      <p><strong>Nível:</strong> <span id="nivel">1</span> - <span id="tituloNivel">Aprendiz da Luz</span></p>
+      <p><strong>XP:</strong> <span id="xp">0</span> / <span id="xpNecessario">200</span></p>
+      <div class="progress-bar">
+        <div id="barraXP"></div>
+      </div>
     </div>
-    <p><span id="xp">0</span> / <span id="xp-next">100</span> XP</p>
+
+    <!-- Frase do Dia -->
+    <div class="frase-dia">
+      <p id="fraseDia"></p>
+    </div>
+
+    <!-- Lista de Missões -->
+    <h2>Missões do Dia</h2>
+    <ul id="listaMissoes"></ul>
+
+    <!-- Criar Missão -->
+    <div class="nova-missao">
+      <input type="text" id="inputMissao" placeholder="Escreva sua missão...">
+      <button onclick="criarMissao()">+ Adicionar Missão</button>
+    </div>
+
+    <!-- Botões -->
+    <div class="acoes">
+      <button onclick="sortearOutra()">🎲 Sortear Nova Missão</button>
+      <button onclick="resetarJogo()">🔄 Resetar Jogo</button>
+    </div>
   </div>
 
-  <h2>🎯 Missões do Dia</h2>
-  <ul id="missoes"></ul>
-
-  <h2>🏆 Conquistas</h2>
-  <div class="conquistas-box">
-    <ul id="conquistas"></ul>
-  </div>
-
-  <h2>✏️ Criar/Editar Missões</h2>
-  <input type="text" id="nova-missao-texto" placeholder="Texto da missão">
-  <input type="number" id="nova-missao-xp" placeholder="XP">
-  <button onclick="adicionarMissao()">Adicionar Missão</button>
-
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getDatabase, ref, onValue, push, update, remove } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyCxjJXRBD2OIa3w8AgFQYVSimXErFGjVc4",
-      authDomain: "aplicativo-72b33.firebaseapp.com",
-      databaseURL: "https://aplicativo-72b33-default-rtdb.firebaseio.com",
-      projectId: "aplicativo-72b33",
-      storageBucket: "aplicativo-72b33.appspot.com",
-      messagingSenderId: "968841875201",
-      appId: "1:968841875201:web:08e6d443f8302367e1d500",
-      measurementId: "G-6XYSJN0GFT"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-
-    const statusRef = ref(db, "status");
-    const fixasRef = ref(db, "missoesFixas");
-    const aleatoriasRef = ref(db, "missoesAleatorias");
-
-    const missoesEl = document.getElementById("missoes");
-    const nivelEl = document.getElementById("nivel");
-    const xpEl = document.getElementById("xp");
-    const xpNextEl = document.getElementById("xp-next");
-    const xpFillEl = document.getElementById("xp-fill");
-    const conquistasEl = document.getElementById("conquistas");
-
-    // Renderizar status em tempo real
-    onValue(statusRef, snapshot=>{
-      const data = snapshot.val() || { xp:0, nivel:1, conquistas:[] };
-      nivelEl.textContent = data.nivel;
-      const xpParaProximoNivel = data.nivel*100 + (data.nivel-1)*50;
-      xpEl.textContent = data.xp;
-      xpNextEl.textContent = xpParaProximoNivel;
-      xpFillEl.style.width = (data.xp / xpParaProximoNivel * 100) + "%";
-
-      conquistasEl.innerHTML = "";
-      (data.conquistas||[]).forEach(c=>{
-        const li = document.createElement("li");
-        li.textContent = c;
-        conquistasEl.appendChild(li);
-      });
-    });
-
-    // Renderizar missões fixas + aleatórias
-    const renderMissoes = (snapshot, tipo)=>{
-      snapshot.forEach(child=>{
-        const m = child.val();
-        const li = document.createElement("li");
-        li.innerHTML = `<span>${m.texto} (${m.xp} XP)</span>
-                        <button onclick="completarMissao('${tipo}', '${child.key}', ${m.xp}, '${m.frase}')">✔</button>`;
-        missoesEl.appendChild(li);
-      });
-    };
-
-    const atualizarMissoes = ()=>{
-      missoesEl.innerHTML = "";
-      onValue(fixasRef, snapshot=>renderMissoes(snapshot,"fixas"), {onlyOnce:true});
-      onValue(aleatoriasRef, snapshot=>renderMissoes(snapshot,"aleatorias"), {onlyOnce:true});
-    };
-    atualizarMissoes();
-
-    // Completar missão
-    window.completarMissao = (tipo, id, xp, frase)=>{
-      onValue(statusRef, snapshot=>{
-        const data = snapshot.val() || { xp:0, nivel:1, conquistas:[] };
-        let novoXP = data.xp + xp;
-        let nivel = data.nivel;
-        let conquistas = data.conquistas || [];
-        let xpParaProximoNivel = nivel*100 + (nivel-1)*50;
-
-        if(novoXP >= xpParaProximoNivel){
-          nivel++;
-          novoXP -= xpParaProximoNivel;
-          conquistas.push(`✨ Subiu para nível ${nivel} ao completar missão!`);
-          alert(`Parabéns! Subiu para nível ${nivel} ✨`);
-        }
-        if(frase) conquistas.push(frase);
-
-        update(statusRef, { xp: novoXP, nivel, conquistas });
-
-        const refMissao = ref(db, tipo==="fixas"?"missoesFixas/"+id:"missoesAleatorias/"+id);
-        remove(refMissao).then(()=>atualizarMissoes());
-      }, { onlyOnce:true });
-    };
-
-    // Adicionar missão manual
-    window.adicionarMissao = ()=>{
-      const texto = document.getElementById("nova-missao-texto").value;
-      const xp = parseInt(document.getElementById("nova-missao-xp").value) || 5;
-      if(!texto) return;
-      push(fixasRef,{texto, xp, frase:`Você completou: ${texto} ✨`}).then(()=>{
-        document.getElementById("nova-missao-texto").value = '';
-        document.getElementById("nova-missao-xp").value = '';
-        atualizarMissoes();
-      });
-    };
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>
